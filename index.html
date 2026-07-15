@@ -793,6 +793,15 @@
       <span class="divider"></span>
 
       <div class="toolbar-group">
+        <button class="icon-btn" id="uploadImageBtn" title="Upload image" type="button" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        </button>
+        <input type="file" id="imageInput" accept="image/*" hidden />
+      </div>
+
+      <span class="divider"></span>
+
+      <div class="toolbar-group">
         <button class="icon-btn" id="addTextBtn" title="Add text" type="button" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
         </button>
@@ -900,6 +909,8 @@
 
   const undoBtn = document.getElementById("undoBtn");
   const redoBtn = document.getElementById("redoBtn");
+  const uploadImageBtn = document.getElementById("uploadImageBtn");
+  const imageInput = document.getElementById("imageInput");
   const addTextBtn = document.getElementById("addTextBtn");
   const duplicateBtn = document.getElementById("duplicateBtn");
   const refineBtn = document.getElementById("refineBtn");
@@ -1259,6 +1270,7 @@
     isRestoring = false;
     resetZoom();
     addTextBtn.disabled = false;
+    uploadImageBtn.disabled = false;
     updatePasteHintVisibility();
     updateSelectionButtons();
   }
@@ -1629,6 +1641,18 @@
       alert("Background removal failed: " + err.message);
     }
   }
+
+  uploadImageBtn.addEventListener("click", () => {
+    if (!fabricCanvas) return;
+    imageInput.click();
+  });
+  imageInput.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    imageInput.value = ""; // allow picking the same file again later
+    if (file && file.type.startsWith("image/")) {
+      await processIncomingImage(file);
+    }
+  });
 
   document.addEventListener("paste", async (event) => {
     if (!fabricCanvas) return; // no PDF loaded yet, nothing to paste onto
