@@ -12,20 +12,28 @@
 
   Libraries:
     - PDF.js                     renders PDF pages onto a canvas
-    - Fabric.js                  drag / resize / rotate image layers on the canvas
+    - Fabric.js                  drag / resize / rotate layers on the canvas
     - @imgly/background-removal  in-browser AI background removal (WASM/ONNX)
-    - pdf-lib                    embeds images into the PDF and exports it
+    - pdf-lib                    embeds images/text into the PDF and exports it
 
   Features:
     - Any page of a multi-page PDF can be selected and edited; Save & Export
       writes every edited page back into one PDF.
-    - Paste (Ctrl+V) adds a new image layer each time — multiple images per
-      page, each independently selectable / movable / resizable / rotatable.
+    - Paste (Ctrl+V) or drag-and-drop an image onto the canvas to add a new
+      image layer each time — multiple images per page, each independently
+      selectable / movable / resizable / rotatable / duplicable.
+    - "Add text" drops a simple text label (drag to move, font-size slider;
+      rotation and resize are intentionally locked for text — see note near
+      lockTextControls() for why).
     - Delete button + Delete/Backspace key removes the selected layer.
-      Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo/redo, tracked per page.
+      Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo/redo, Ctrl+D duplicate, arrow
+      keys nudge the selected layer by 1px (10px with Shift) — all tracked
+      per page.
     - "Refine edges" opens a brush tool to manually erase leftover background
       or restore areas the AI cut away, using the original pasted image as
       the source for restored pixels.
+    - Zoom in/out on the canvas for precise placement; a browser warning
+      appears if you try to close the tab with unsaved changes.
 
   No Python, no server, no deployment. Open this file through any static
   web server (module scripts are blocked on file://) — see the chat message
@@ -370,14 +378,24 @@
   .canvas-shell {
     position: relative;
     border-radius: 10px;
-    overflow: hidden;
     box-shadow: 0 1px 0 var(--border-subtle), 0 20px 48px rgba(0, 0, 0, 0.45);
     max-width: 100%;
-    line-height: 0;
+    max-height: 72vh;
+    overflow: auto;
+  }
+  .canvas-shell.dragover::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: var(--z-dragover);
+    border: 2px dashed var(--accent);
+    border-radius: 10px;
+    background: var(--accent-wash);
+    pointer-events: none;
   }
 
-  #canvasWrap { line-height: 0; max-width: 100%; }
-  #fabricCanvas { display: block; max-width: 100%; height: auto; }
+  #canvasWrap { line-height: 0; }
+  #fabricCanvas { display: block; }
 
   /* Floating "paste here" hint, shown while the current page has no layers */
   .paste-hint {
@@ -427,7 +445,7 @@
   }
   .paste-hint-badge .sub { font-size: 12px; color: var(--muted); }
 
-  /* Canvas toolbar — page nav, undo/redo, layer actions, file info ---- */
+  /* Canvas toolbar — page nav, zoom, undo/redo, layer actions, file info */
   .canvas-toolbar {
     display: flex;
     align-items: center;
@@ -454,6 +472,39 @@
     text-align: center;
     white-space: nowrap;
   }
+
+  .zoom-label {
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--ink);
+    font-weight: 600;
+    min-width: 44px;
+    text-align: center;
+    white-space: nowrap;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+  }
+  .zoom-label:hover { background: var(--surface-2); }
+
+  .tool-label {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .toolbar-slider {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .toolbar-slider input[type="range"] {
+    accent-color: var(--accent);
+    width: 80px;
+  }
+  .toolbar-slider input[type="range"]:disabled { opacity: 0.4; }
 
   .link-btn {
     background: none;
@@ -633,7 +684,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M15 3v5h5"/></svg>
     </div>
     <h2>Drop a PDF, or choose one</h2>
-    <p>Paste images anywhere on the page afterward — backgrounds are cut out automatically and dropped onto the document. Works on any page, and you can paste more than one image.</p>
+    <p>Paste or drag images onto the page afterward — backgrounds are cut out automatically and dropped onto the document. Works on any page, and you can add more than one image, plus text labels.</p>
     <label class="btn" for="pdfInput">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M7 9l5-5 5 5"/><path d="M12 4v12"/></svg>
       Choose PDF
@@ -646,7 +697,7 @@
       </div>
       <div class="step">
         <span class="step-num">2</span>
-        <span class="step-label">Paste one or more images — backgrounds removed automatically</span>
+        <span class="step-label">Paste or drop images — backgrounds removed automatically</span>
       </div>
       <div class="step">
         <span class="step-num">3</span>
@@ -662,14 +713,14 @@
 
   <!-- Editor: PDF canvas + Fabric.js overlay -->
   <div id="editorArea" class="editor-area">
-    <div class="canvas-shell">
+    <div class="canvas-shell" id="canvasShell">
       <div id="canvasWrap">
         <canvas id="fabricCanvas"></canvas>
       </div>
       <div id="pasteHint" class="paste-hint">
         <div class="paste-hint-badge">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
-          <span class="kbd-row"><kbd>Ctrl</kbd>+<kbd>V</kbd> to paste an image</span>
+          <span class="kbd-row"><kbd>Ctrl</kbd>+<kbd>V</kbd> to paste, or drop an image here</span>
           <span class="sub">Its background is removed automatically</span>
         </div>
       </div>
@@ -689,6 +740,18 @@
       <span class="divider"></span>
 
       <div class="toolbar-group">
+        <button class="icon-btn" id="zoomOutBtn" title="Zoom out" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button class="zoom-label" id="zoomLabel" title="Reset zoom" type="button">100%</button>
+        <button class="icon-btn" id="zoomInBtn" title="Zoom in" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div>
+
+      <span class="divider"></span>
+
+      <div class="toolbar-group">
         <button class="icon-btn" id="undoBtn" title="Undo (Ctrl+Z)" type="button" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
         </button>
@@ -700,12 +763,29 @@
       <span class="divider"></span>
 
       <div class="toolbar-group">
+        <button class="icon-btn" id="addTextBtn" title="Add text" type="button" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+        </button>
+        <button class="icon-btn" id="duplicateBtn" title="Duplicate (Ctrl+D)" type="button" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
         <button class="icon-btn" id="refineBtn" title="Refine edges" type="button" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.06 11.9l8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></svg>
         </button>
         <button class="icon-btn danger" id="deleteBtn" title="Delete selected (Delete)" type="button" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
         </button>
+      </div>
+
+      <span class="divider"></span>
+
+      <div class="toolbar-slider">
+        <span class="tool-label">Opacity</span>
+        <input type="range" id="opacitySlider" min="0" max="100" value="100" disabled />
+      </div>
+      <div class="toolbar-slider">
+        <span class="tool-label">Text size</span>
+        <input type="range" id="fontSizeSlider" min="8" max="120" value="24" disabled />
       </div>
 
       <span class="divider"></span>
@@ -758,7 +838,7 @@
   // esm.sh serves npm packages as browser-ready ES modules.
   // ---------------------------------------------------------------------
   import { removeBackground as imglyRemoveBackground } from "https://esm.sh/@imgly/background-removal@1.5.8";
-  import { PDFDocument, degrees } from "https://esm.sh/pdf-lib@1.17.1";
+  import { PDFDocument, degrees, rgb, StandardFonts } from "https://esm.sh/pdf-lib@1.17.1";
 
   // ---------------------------------------------------------------------
   // Setup
@@ -774,13 +854,24 @@
   const pasteHint = document.getElementById("pasteHint");
   const fileNameLabel = document.getElementById("fileNameLabel");
   const startOverBtn = document.getElementById("startOverBtn");
+  const canvasShell = document.getElementById("canvasShell");
+
   const prevPageBtn = document.getElementById("prevPageBtn");
   const nextPageBtn = document.getElementById("nextPageBtn");
   const pageIndicator = document.getElementById("pageIndicator");
+
+  const zoomOutBtn = document.getElementById("zoomOutBtn");
+  const zoomInBtn = document.getElementById("zoomInBtn");
+  const zoomLabel = document.getElementById("zoomLabel");
+
   const undoBtn = document.getElementById("undoBtn");
   const redoBtn = document.getElementById("redoBtn");
+  const addTextBtn = document.getElementById("addTextBtn");
+  const duplicateBtn = document.getElementById("duplicateBtn");
   const refineBtn = document.getElementById("refineBtn");
   const deleteBtn = document.getElementById("deleteBtn");
+  const opacitySlider = document.getElementById("opacitySlider");
+  const fontSizeSlider = document.getElementById("fontSizeSlider");
 
   const refineModal = document.getElementById("refineModal");
   const refineCanvas = document.getElementById("refineCanvas");
@@ -798,15 +889,20 @@
   let currentPageIndex = 0;     // 0-based
   let currentPdfFile = null;    // original File object, re-read on save
   let fabricCanvas = null;      // Fabric.js canvas instance for the active page
+  let currentZoom = 1;
+  let hasUnsavedChanges = false;
 
   // Per-page state, keyed by 0-based page index:
   //   { bgDataUrl, canvasWidth, canvasHeight, layers: LayerData[],
   //     history: { stack: LayerData[][], pointer: number } }
-  // LayerData = { blob, originalBlob, aiBlob, left, top, scaleX, scaleY,
-  //               angle, naturalWidth, naturalHeight }
+  // LayerData (image) = { kind:"image", blob, originalBlob, aiBlob, left,
+  //   top, scaleX, scaleY, angle, naturalWidth, naturalHeight, opacity }
+  // LayerData (text)  = { kind:"text", text, fontSize, left, top, scaleX,
+  //   scaleY, angle, naturalWidth, naturalHeight, opacity }
   const pageCache = new Map();
 
   let isRestoring = false; // guards history/UI updates during programmatic canvas rebuilds
+  let debouncedHistoryTimer = null; // debounce for nudge/opacity/font-size drags
 
   // ---- Refine-edges modal state -------------------------------------
   let activeRefineLayerObj = null;
@@ -844,6 +940,24 @@
     borderColor: "#49de78",
   };
 
+  // Text layers intentionally cannot be rotated or drag-resized: pdf-lib
+  // positions text by its baseline using font metrics that only
+  // approximately match the browser's rendering of the same font, so an
+  // arbitrary rotation/scale transform (which compounds that mismatch) is
+  // far more likely to visibly drift between the on-screen preview and the
+  // exported PDF than a plain axis-aligned label is. Font size is exposed
+  // via a slider instead, which keeps the export math simple and reliable.
+  function lockTextControls(obj) {
+    obj.setControlsVisibility({
+      mt: false, mb: false, ml: false, mr: false,
+      tl: false, tr: false, bl: false, br: false,
+      mtr: false,
+    });
+    obj.lockRotation = true;
+    obj.lockScalingX = true;
+    obj.lockScalingY = true;
+  }
+
   function loadImageEl(url) {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -852,6 +966,24 @@
       img.src = url;
     });
   }
+
+  function scheduleDebouncedHistoryPush() {
+    hasUnsavedChanges = true;
+    if (debouncedHistoryTimer) clearTimeout(debouncedHistoryTimer);
+    debouncedHistoryTimer = window.setTimeout(() => {
+      pushHistorySnapshot();
+      updateSaveButtonState();
+      debouncedHistoryTimer = null;
+    }, 500);
+  }
+
+  // Warn before closing/reloading the tab if there's anything unsaved —
+  // there is no server and no auto-save, so a closed tab means lost work.
+  window.addEventListener("beforeunload", (e) => {
+    if (!hasUnsavedChanges) return;
+    e.preventDefault();
+    e.returnValue = "";
+  });
 
   // ---------------------------------------------------------------------
   // 1. PDF upload & page rendering via PDF.js
@@ -871,6 +1003,7 @@
       numPages = pdfProxy.numPages;
       pageCache.clear();
       currentPageIndex = 0;
+      hasUnsavedChanges = false;
 
       await renderPage(0);
 
@@ -918,6 +1051,7 @@
     currentPageIndex = 0;
     pageCache.clear();
     saveBtn.disabled = true;
+    hasUnsavedChanges = false;
     setStatus("", "idle");
     if (fabricCanvas) {
       fabricCanvas.dispose();
@@ -998,6 +1132,8 @@
 
     await restoreLayers(pageState.layers);
     isRestoring = false;
+    resetZoom();
+    addTextBtn.disabled = false;
     updatePasteHintVisibility();
     updateSelectionButtons();
   }
@@ -1022,9 +1158,16 @@
 
   function updateSelectionButtons() {
     const obj = fabricCanvas ? fabricCanvas.getActiveObject() : null;
-    const isSingleImage = !!obj && obj.type === "image";
+    const kind = obj ? obj.__layerKind : null;
     deleteBtn.disabled = !obj;
-    refineBtn.disabled = !isSingleImage;
+    duplicateBtn.disabled = !obj;
+    refineBtn.disabled = kind !== "image";
+
+    opacitySlider.disabled = !obj;
+    opacitySlider.value = obj ? Math.round((obj.opacity ?? 1) * 100) : 100;
+
+    fontSizeSlider.disabled = kind !== "text";
+    if (kind === "text") fontSizeSlider.value = Math.round(obj.fontSize);
   }
 
   function updateSaveButtonState() {
@@ -1039,26 +1182,79 @@
   }
 
   // ---------------------------------------------------------------------
+  // Zoom — Fabric's native setZoom()/setWidth()/setHeight() pattern. The
+  // logical export coordinate space (pageState.canvasWidth/canvasHeight)
+  // never changes; only the on-screen rendering size does, so none of the
+  // Save & Export math below needs to know or care about the zoom level.
+  // ---------------------------------------------------------------------
+  function applyZoom(zoom) {
+    currentZoom = Math.min(3, Math.max(0.3, zoom));
+    const pageState = pageCache.get(currentPageIndex);
+    if (fabricCanvas && pageState) {
+      fabricCanvas.setZoom(currentZoom);
+      fabricCanvas.setWidth(pageState.canvasWidth * currentZoom);
+      fabricCanvas.setHeight(pageState.canvasHeight * currentZoom);
+    }
+    zoomLabel.textContent = `${Math.round(currentZoom * 100)}%`;
+    zoomInBtn.disabled = currentZoom >= 3;
+    zoomOutBtn.disabled = currentZoom <= 0.3;
+  }
+  function resetZoom() { applyZoom(1); }
+
+  zoomInBtn.addEventListener("click", () => applyZoom(currentZoom + 0.15));
+  zoomOutBtn.addEventListener("click", () => applyZoom(currentZoom - 0.15));
+  zoomLabel.addEventListener("click", resetZoom);
+
+  // ---------------------------------------------------------------------
   // Layer <-> Fabric object bridging (serialize / restore / add)
   // ---------------------------------------------------------------------
   function serializeCurrentLayers() {
     if (!fabricCanvas) return [];
-    return fabricCanvas.getObjects().map((obj) => ({
-      blob: obj.__layerData.blob,
-      originalBlob: obj.__layerData.originalBlob,
-      aiBlob: obj.__layerData.aiBlob,
-      left: obj.left,
-      top: obj.top,
-      scaleX: obj.scaleX,
-      scaleY: obj.scaleY,
-      angle: obj.angle || 0,
-      naturalWidth: obj.width,
-      naturalHeight: obj.height,
-    }));
+    return fabricCanvas.getObjects().map((obj) => {
+      const base = {
+        kind: obj.__layerKind,
+        left: obj.left,
+        top: obj.top,
+        scaleX: obj.scaleX,
+        scaleY: obj.scaleY,
+        angle: obj.angle || 0,
+        naturalWidth: obj.width,
+        naturalHeight: obj.height,
+        opacity: obj.opacity ?? 1,
+      };
+      if (obj.__layerKind === "text") {
+        return { ...base, text: obj.text, fontSize: obj.fontSize };
+      }
+      return {
+        ...base,
+        blob: obj.__layerData.blob,
+        originalBlob: obj.__layerData.originalBlob,
+        aiBlob: obj.__layerData.aiBlob,
+      };
+    });
   }
 
   function addLayerFromData(data) {
     return new Promise((resolve) => {
+      if (data.kind === "text") {
+        const textObj = new fabric.IText(data.text, {
+          left: data.left,
+          top: data.top,
+          fontSize: data.fontSize,
+          fontFamily: "Helvetica, Arial, sans-serif",
+          fill: "#111111",
+          opacity: data.opacity ?? 1,
+          originX: "left",
+          originY: "top",
+          angle: 0,
+        });
+        lockTextControls(textObj);
+        textObj.__layerKind = "text";
+        fabricCanvas.add(textObj);
+        resolve(textObj);
+        return;
+      }
+
       const url = URL.createObjectURL(data.blob);
       fabric.Image.fromURL(url, (img) => {
         img.set({
@@ -1068,7 +1264,9 @@
           scaleX: data.scaleX,
           scaleY: data.scaleY,
           angle: data.angle || 0,
+          opacity: data.opacity ?? 1,
         });
+        img.__layerKind = "image";
         img.__layerData = {
           blob: data.blob,
           originalBlob: data.originalBlob,
@@ -1093,6 +1291,7 @@
   // ---------------------------------------------------------------------
   function onCanvasChanged() {
     if (isRestoring) return;
+    hasUnsavedChanges = true;
     pushHistorySnapshot();
     updatePasteHintVisibility();
     updateSaveButtonState();
@@ -1127,6 +1326,7 @@
     isRestoring = true;
     await restoreLayers(snapshot);
     isRestoring = false;
+    hasUnsavedChanges = true;
     fabricCanvas.discardActiveObject();
     fabricCanvas.renderAll();
     updateUndoRedoButtons();
@@ -1153,7 +1353,7 @@
   redoBtn.addEventListener("click", redo);
 
   // ---------------------------------------------------------------------
-  // Delete selected layer
+  // Delete / duplicate selected layer
   // ---------------------------------------------------------------------
   function deleteActiveObject() {
     const obj = fabricCanvas ? fabricCanvas.getActiveObject() : null;
@@ -1168,10 +1368,78 @@
     updateSelectionButtons();
   }
 
+  function duplicateActiveObject() {
+    const obj = fabricCanvas ? fabricCanvas.getActiveObject() : null;
+    if (!obj || !obj.__layerKind || obj.type === "activeSelection") return;
+    obj.clone((cloned) => {
+      cloned.set({ left: obj.left + 20, top: obj.top + 20 });
+      cloned.__layerKind = obj.__layerKind;
+      if (obj.__layerKind === "image") {
+        cloned.__layerData = { ...obj.__layerData };
+      } else {
+        lockTextControls(cloned);
+      }
+      fabricCanvas.add(cloned);
+      fabricCanvas.setActiveObject(cloned);
+      fabricCanvas.renderAll();
+      updateSelectionButtons();
+    });
+  }
+
   deleteBtn.addEventListener("click", deleteActiveObject);
+  duplicateBtn.addEventListener("click", duplicateActiveObject);
 
   // ---------------------------------------------------------------------
-  // Keyboard shortcuts: Delete, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y, Escape
+  // Add text layer
+  // ---------------------------------------------------------------------
+  addTextBtn.addEventListener("click", () => {
+    if (!fabricCanvas) return;
+    const pageState = pageCache.get(currentPageIndex);
+    const fontSize = Math.max(16, Math.round(pageState.canvasHeight * 0.03));
+
+    const textObj = new fabric.IText("Double-click to edit", {
+      left: pageState.canvasWidth * 0.15,
+      top: pageState.canvasHeight * 0.1,
+      fontSize,
+      fontFamily: "Helvetica, Arial, sans-serif",
+      fill: "#111111",
+      originX: "left",
+      originY: "top",
+    });
+    lockTextControls(textObj);
+    textObj.__layerKind = "text";
+
+    fabricCanvas.add(textObj);
+    fabricCanvas.setActiveObject(textObj);
+    textObj.enterEditing();
+    textObj.selectAll();
+    fabricCanvas.renderAll();
+    updateSelectionButtons();
+    // object:added fires -> history/paste-hint/save-button handled centrally
+  });
+
+  // ---------------------------------------------------------------------
+  // Opacity / font-size sliders (debounced history push while dragging)
+  // ---------------------------------------------------------------------
+  opacitySlider.addEventListener("input", () => {
+    const obj = fabricCanvas ? fabricCanvas.getActiveObject() : null;
+    if (!obj) return;
+    obj.set("opacity", Number(opacitySlider.value) / 100);
+    fabricCanvas.renderAll();
+    scheduleDebouncedHistoryPush();
+  });
+
+  fontSizeSlider.addEventListener("input", () => {
+    const obj = fabricCanvas ? fabricCanvas.getActiveObject() : null;
+    if (!obj || obj.__layerKind !== "text") return;
+    obj.set("fontSize", Number(fontSizeSlider.value));
+    obj.setCoords();
+    fabricCanvas.renderAll();
+    scheduleDebouncedHistoryPush();
+  });
+
+  // ---------------------------------------------------------------------
+  // Keyboard shortcuts: Delete, Ctrl+Z/Shift+Z/Y, Ctrl+D, arrows, Escape
   // ---------------------------------------------------------------------
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !refineModal.hidden) {
@@ -1182,22 +1450,61 @@
 
     const tag = document.activeElement ? document.activeElement.tagName : "";
     const isTyping = tag === "INPUT" || tag === "TEXTAREA";
+    const activeObj = fabricCanvas ? fabricCanvas.getActiveObject() : null;
+    // Fabric's IText puts itself into an editing state with its own text
+    // cursor; typing/arrow-keys there must reach the text, not our shortcuts.
+    const isEditingText = !!activeObj && activeObj.isEditing;
 
-    if ((e.key === "Delete" || e.key === "Backspace") && !isTyping && fabricCanvas && fabricCanvas.getActiveObject()) {
+    if ((e.key === "Delete" || e.key === "Backspace") && !isTyping && !isEditingText && activeObj) {
       e.preventDefault();
       deleteActiveObject();
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && !isTyping) {
+    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && !isTyping && !isEditingText && activeObj) {
+      e.preventDefault();
+      const step = e.shiftKey ? 10 : 1;
+      if (e.key === "ArrowUp") activeObj.top -= step;
+      if (e.key === "ArrowDown") activeObj.top += step;
+      if (e.key === "ArrowLeft") activeObj.left -= step;
+      if (e.key === "ArrowRight") activeObj.left += step;
+      activeObj.setCoords();
+      fabricCanvas.renderAll();
+      scheduleDebouncedHistoryPush();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && !isTyping && !isEditingText) {
       const key = e.key.toLowerCase();
       if (key === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
       if ((key === "z" && e.shiftKey) || key === "y") { e.preventDefault(); redo(); return; }
+      if (key === "d") { e.preventDefault(); duplicateActiveObject(); return; }
     }
   });
 
   // ---------------------------------------------------------------------
-  // 2 & 3. Intercept paste, remove the background entirely in-browser
+  // Shared image intake: paste, or drag-and-drop straight onto the canvas
   // ---------------------------------------------------------------------
+  async function processIncomingImage(imageFile) {
+    setStatus("Removing background…", "loading");
+    try {
+      // Runs fully in the browser via WASM/ONNX Runtime Web. On the very
+      // first call it fetches the (cached) AI model from IMG.LY's CDN.
+      const transparentBlob = await imglyRemoveBackground(imageFile, {
+        model: "isnet_quint8", // smallest/fastest quality tier (~40MB)
+        progress: (key, current, total) => {
+          const pct = total ? Math.round((current / total) * 100) : 0;
+          setStatus("Downloading model…", "loading", pct);
+        },
+      });
+      await addPastedImageLayer(imageFile, transparentBlob);
+      setStatus("Background removed", "success");
+      window.setTimeout(() => setStatus("", "idle"), 1800);
+    } catch (err) {
+      console.error(err);
+      setStatus("Background removal failed", "error");
+      alert("Background removal failed: " + err.message);
+    }
+  }
+
   document.addEventListener("paste", async (event) => {
     if (!fabricCanvas) return; // no PDF loaded yet, nothing to paste onto
     if (!refineModal.hidden) return; // don't interfere with the refine modal
@@ -1215,47 +1522,49 @@
     if (!imageFile) return; // pasted content wasn't an image
 
     event.preventDefault();
-    setStatus("Removing background…", "loading");
+    await processIncomingImage(imageFile);
+  });
 
-    try {
-      // Runs fully in the browser via WASM/ONNX Runtime Web. On the very
-      // first call it fetches the (cached) AI model from IMG.LY's CDN.
-      const transparentBlob = await imglyRemoveBackground(imageFile, {
-        model: "isnet_quint8", // smallest/fastest quality tier (~40MB)
-        progress: (key, current, total) => {
-          const pct = total ? Math.round((current / total) * 100) : 0;
-          setStatus(`Downloading model…`, "loading", pct);
-        },
-      });
-
-      await addPastedImageLayer(imageFile, transparentBlob);
-      setStatus("Background removed", "success");
-      window.setTimeout(() => setStatus("", "idle"), 1800);
-    } catch (err) {
-      console.error(err);
-      setStatus("Background removal failed", "error");
-      alert("Background removal failed: " + err.message);
-    }
+  ["dragenter", "dragover"].forEach((evt) =>
+    canvasShell.addEventListener(evt, (e) => {
+      if (!fabricCanvas) return;
+      e.preventDefault();
+      canvasShell.classList.add("dragover");
+    })
+  );
+  ["dragleave", "drop"].forEach((evt) =>
+    canvasShell.addEventListener(evt, (e) => {
+      e.preventDefault();
+      canvasShell.classList.remove("dragover");
+    })
+  );
+  canvasShell.addEventListener("drop", async (e) => {
+    if (!fabricCanvas) return;
+    const file = e.dataTransfer?.files?.[0];
+    if (!file || !file.type.startsWith("image/")) return;
+    await processIncomingImage(file);
   });
 
   // ---------------------------------------------------------------------
-  // 5. Canvas overlay — drop the transparent PNG onto the Fabric canvas
+  // Canvas overlay — drop the transparent PNG onto the Fabric canvas
   // ---------------------------------------------------------------------
   function addPastedImageLayer(originalBlob, transparentBlob) {
+    const pageState = pageCache.get(currentPageIndex);
     return new Promise((resolve) => {
       const url = URL.createObjectURL(transparentBlob);
       fabric.Image.fromURL(url, (img) => {
-        const maxDim = Math.min(fabricCanvas.width, fabricCanvas.height) * 0.5;
+        const maxDim = Math.min(pageState.canvasWidth, pageState.canvasHeight) * 0.5;
         const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
         const cascade = (fabricCanvas.getObjects().length % 8) * 22;
 
         img.set({
           ...IMAGE_STYLE,
-          left: (fabricCanvas.width - img.width * scale) / 2 + cascade,
-          top: (fabricCanvas.height - img.height * scale) / 2 + cascade,
+          left: (pageState.canvasWidth - img.width * scale) / 2 + cascade,
+          top: (pageState.canvasHeight - img.height * scale) / 2 + cascade,
           scaleX: scale,
           scaleY: scale,
         });
+        img.__layerKind = "image";
         img.__layerData = { blob: transparentBlob, originalBlob, aiBlob: transparentBlob };
 
         fabricCanvas.add(img);
@@ -1281,7 +1590,7 @@
 
   async function openRefineModal() {
     const obj = fabricCanvas ? fabricCanvas.getActiveObject() : null;
-    if (!obj || obj.type !== "image") return;
+    if (!obj || obj.__layerKind !== "image") return;
     activeRefineLayerObj = obj;
 
     const currentUrl = URL.createObjectURL(obj.__layerData.blob);
@@ -1398,19 +1707,22 @@
         fabricCanvas.renderAll();
         closeRefineModal();
         pushHistorySnapshot(); // setSrc doesn't fire object:modified, so push manually
+        hasUnsavedChanges = true;
+        updateSaveButtonState();
       });
     }, "image/png");
   }
 
   // ---------------------------------------------------------------------
-  // 6. Save & Export — embed every edited page's layers with pdf-lib
+  // 6. Save & Export — embed every edited page's image/text layers
   // ---------------------------------------------------------------------
   function computeCanvasCenterFromLayer(layer) {
     // Reconstructs the true visual center of a *serialized* (non-live)
     // layer from left/top/angle. Fabric's left/top track the position of
     // the origin corner AFTER rotation (not the pre-rotation position), so
-    // this inverts that relationship — see the inline derivation notes
-    // below in embedLayerIntoPage for the matching forward transform.
+    // this inverts that relationship — see the matching forward transform
+    // in embedImageLayer. Text layers always have angle 0, so this
+    // collapses to the simple centered case for them.
     const W = layer.naturalWidth * layer.scaleX;
     const H = layer.naturalHeight * layer.scaleY;
     const angleRad = ((layer.angle || 0) * Math.PI) / 180;
@@ -1420,7 +1732,7 @@
     };
   }
 
-  async function embedLayerIntoPage(pdfDoc, page, layer, canvasWidth, canvasHeight, centerCanvas) {
+  async function embedImageLayer(pdfDoc, page, layer, canvasWidth, canvasHeight, centerCanvas) {
     const { width: pageWidth, height: pageHeight } = page.getSize();
     const imageBytes = await layer.blob.arrayBuffer();
     const pngImage = await pdfDoc.embedPng(imageBytes);
@@ -1459,6 +1771,41 @@
       width: pdfWidth,
       height: pdfHeight,
       rotate: degrees(pdfAngleDeg),
+      opacity: layer.opacity ?? 1,
+    });
+  }
+
+  function embedTextLayer(page, layer, canvasWidth, canvasHeight, centerCanvas, helveticaFont) {
+    const { width: pageWidth, height: pageHeight } = page.getSize();
+    const scaleX = pageWidth / canvasWidth;
+    const scaleY = pageHeight / canvasHeight;
+
+    // Text is never rotated (see lockTextControls), so the box is always
+    // axis-aligned — no rotation-anchor math needed, just center -> edges.
+    const pdfFontSize = layer.fontSize * scaleY;
+    const pdfWidth = layer.naturalWidth * scaleX;
+    const pdfHeight = layer.naturalHeight * scaleY;
+    const centerPdfX = centerCanvas.x * scaleX;
+    const centerPdfY = pageHeight - centerCanvas.y * scaleY;
+
+    // pdf-lib positions text by its baseline, not a bounding-box corner.
+    // Convert the box's bottom edge to a baseline using the font's own
+    // descent metric so the text sits at the same visual height as the
+    // box Fabric was showing on screen.
+    const ascent = helveticaFont.heightAtSize(pdfFontSize, { descender: false });
+    const totalHeight = helveticaFont.heightAtSize(pdfFontSize, { descender: true });
+    const descent = totalHeight - ascent;
+
+    const pdfX = centerPdfX - pdfWidth / 2;
+    const pdfY = centerPdfY - pdfHeight / 2 + descent;
+
+    page.drawText(layer.text || "", {
+      x: pdfX,
+      y: pdfY,
+      size: pdfFontSize,
+      font: helveticaFont,
+      color: rgb(0.07, 0.07, 0.07),
+      opacity: layer.opacity ?? 1,
     });
   }
 
@@ -1478,6 +1825,7 @@
 
       const pdfBytes = await currentPdfFile.arrayBuffer();
       const pdfDoc = await PDFDocument.load(pdfBytes);
+      const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
       const pages = pdfDoc.getPages();
 
       for (const [pageIndex, state] of pageCache) {
@@ -1491,7 +1839,12 @@
           const centerCanvas = isLivePage && liveObjects[i]
             ? liveObjects[i].getCenterPoint()
             : computeCanvasCenterFromLayer(layer);
-          await embedLayerIntoPage(pdfDoc, page, layer, state.canvasWidth, state.canvasHeight, centerCanvas);
+
+          if (layer.kind === "text") {
+            embedTextLayer(page, layer, state.canvasWidth, state.canvasHeight, centerCanvas, helveticaFont);
+          } else {
+            await embedImageLayer(pdfDoc, page, layer, state.canvasWidth, state.canvasHeight, centerCanvas);
+          }
         }
       }
 
@@ -1507,6 +1860,7 @@
       a.remove();
       URL.revokeObjectURL(downloadUrl);
 
+      hasUnsavedChanges = false;
       setStatus("Saved — download started", "success");
       window.setTimeout(() => setStatus("", "idle"), 2200);
     } catch (err) {
