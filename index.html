@@ -429,11 +429,21 @@
 
   /* Editor area ------------------------------------------------------- */
   .editor-area {
+    /* Not just invisible (opacity:0) but actually removed from layout —
+       otherwise this box still sits in <main>'s flex row as a full-width
+       sibling of #dropzone even while unused, which throws off both
+       justify-content:center (centers the *pair*, not the dropzone) and
+       the dropzone's own margin:auto centering (space gets split against
+       a phantom sibling instead of the container). display:none is set
+       here and overridden by .visible below, in sync with the class JS
+       already toggles. */
+    display: none;
     width: 100%;
     opacity: 0;
     transform: translateY(10px);
   }
   .editor-area.visible {
+    display: block;
     animation: rise-in 0.45s var(--ease) forwards;
   }
   @keyframes rise-in {
