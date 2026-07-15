@@ -246,6 +246,28 @@
   .icon-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
   .icon-btn:disabled { color: var(--border); cursor: not-allowed; }
   .icon-btn.danger:hover:not(:disabled) { color: var(--danger); background: var(--danger-wash); }
+  .icon-btn.active { background: var(--accent); color: var(--accent-ink); }
+  .icon-btn.active:hover:not(:disabled) { background: var(--accent-hover); color: var(--accent-ink); }
+
+  #strokeColorInput {
+    width: 26px;
+    height: 26px;
+    margin-left: 6px;
+    padding: 0;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+  }
+  #strokeColorInput:disabled { cursor: not-allowed; opacity: 0.4; }
+  #strokeColorInput::-webkit-color-swatch-wrapper { padding: 2px; }
+  #strokeColorInput::-webkit-color-swatch { border: none; border-radius: 4px; }
+
+  #strokeWidthSlider {
+    width: 70px;
+    accent-color: var(--accent);
+  }
+  #strokeWidthSlider:disabled { opacity: 0.4; }
 
   /* ---------------------------------------------------------------- */
   /* Layout                                                            */
@@ -929,6 +951,31 @@
 
       <span class="divider"></span>
 
+      <div class="toolbar-group">
+        <button class="icon-btn" id="penToolBtn" title="Pen" type="button" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+        </button>
+        <button class="icon-btn" id="highlightToolBtn" title="Highlighter" type="button" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l6 6"/><path d="M4 20l3.5-1 8-8-2.5-2.5-8 8L4 20z"/><path d="M14.5 6.5L18 3l3 3-3.5 3.5"/></svg>
+        </button>
+        <button class="icon-btn" id="lineToolBtn" title="Line" type="button" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="19" x2="19" y2="5"/></svg>
+        </button>
+        <button class="icon-btn" id="arrowToolBtn" title="Arrow" type="button" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="19" x2="19" y2="5"/><polyline points="9 5 19 5 19 15"/></svg>
+        </button>
+        <button class="icon-btn" id="rectToolBtn" title="Rectangle" type="button" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1"/></svg>
+        </button>
+        <button class="icon-btn" id="ellipseToolBtn" title="Ellipse" type="button" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="12" rx="9" ry="7"/></svg>
+        </button>
+        <input type="color" id="strokeColorInput" value="#e11d48" title="Color" disabled />
+        <input type="range" id="strokeWidthSlider" min="1" max="24" value="3" title="Stroke width" disabled />
+      </div>
+
+      <span class="divider"></span>
+
       <div class="toolbar-slider">
         <span class="tool-label">Opacity</span>
         <input type="range" id="opacitySlider" min="0" max="100" value="100" disabled />
@@ -1034,6 +1081,15 @@
   const opacitySlider = document.getElementById("opacitySlider");
   const fontSizeSlider = document.getElementById("fontSizeSlider");
 
+  const penToolBtn = document.getElementById("penToolBtn");
+  const highlightToolBtn = document.getElementById("highlightToolBtn");
+  const lineToolBtn = document.getElementById("lineToolBtn");
+  const arrowToolBtn = document.getElementById("arrowToolBtn");
+  const rectToolBtn = document.getElementById("rectToolBtn");
+  const ellipseToolBtn = document.getElementById("ellipseToolBtn");
+  const strokeColorInput = document.getElementById("strokeColorInput");
+  const strokeWidthSlider = document.getElementById("strokeWidthSlider");
+
   const refineModal = document.getElementById("refineModal");
   const refineCanvas = document.getElementById("refineCanvas");
   const closeRefineBtn = document.getElementById("closeRefineBtn");
@@ -1073,6 +1129,14 @@
   const pageRotations = new Map();    // originalIndex -> extra rotation in degrees (0/90/180/270)
   const thumbnailCache = new Map();   // originalIndex -> small dataURL for the sidebar
   let draggedThumbOriginalIndex = null;
+
+  // Drawing/annotation tools: "select" | "pen" | "highlight" | "line" | "arrow" | "rect" | "ellipse"
+  let activeTool = "select";
+  const toolButtons = {
+    pen: null, highlight: null, line: null, arrow: null, rect: null, ellipse: null,
+  }; // filled in once the buttons are wired up below
+  let shapeDragStart = null;  // canvas-pixel {x,y} where the current drag began
+  let shapeDragObj = null;    // the in-progress fabric object being drawn
 
   let isRestoring = false; // guards history/UI updates during programmatic canvas rebuilds
   let debouncedHistoryTimer = null; // debounce for nudge/opacity/font-size drags
@@ -1129,6 +1193,17 @@
     obj.lockRotation = true;
     obj.lockScalingX = true;
     obj.lockScalingY = true;
+  }
+
+  // Pen/highlighter/line/arrow strokes ("path" kind) can be moved and
+  // resized freely, but rotation is deliberately locked — same tradeoff as
+  // lockTextControls above: it keeps the export math (translate + scale
+  // only, no rotation-anchor trig) simple and provably correct instead of
+  // risking another rotation/position mismatch bug like the ones already
+  // fixed twice for images.
+  function lockRotationOnly(obj) {
+    obj.setControlsVisibility({ mtr: false });
+    obj.lockRotation = true;
   }
 
   function loadImageEl(url) {
@@ -1330,6 +1405,10 @@
       fabricCanvas.dispose();
       fabricCanvas = null;
     }
+    activeTool = "select";
+    Object.values(toolButtons).forEach((btn) => btn.classList.remove("active"));
+    [penToolBtn, highlightToolBtn, lineToolBtn, arrowToolBtn, rectToolBtn, ellipseToolBtn,
+      strokeColorInput, strokeWidthSlider].forEach((el) => { el.disabled = true; });
   });
 
   // Render (or re-activate) a given 0-based page index, persisting the
@@ -1387,12 +1466,28 @@
       height: pageState.canvasHeight,
       selection: true,
     });
+    // Freehand strokes from Fabric's own PencilBrush are added to the canvas
+    // internally (before "path:created" fires), so this tagging listener
+    // MUST be registered before the onCanvasChanged one below — otherwise
+    // the very first history snapshot for a new stroke would be captured
+    // with no __layerKind yet and serialization would break on it.
+    fabricCanvas.on("object:added", (e) => {
+      const obj = e.target;
+      if (obj && obj.type === "path" && !obj.__layerKind) {
+        obj.__layerKind = "path";
+        obj.set({ fill: null });
+        lockRotationOnly(obj);
+      }
+    });
     fabricCanvas.on("object:added", onCanvasChanged);
     fabricCanvas.on("object:modified", onCanvasChanged);
     fabricCanvas.on("object:removed", onCanvasChanged);
     fabricCanvas.on("selection:created", updateSelectionButtons);
     fabricCanvas.on("selection:updated", updateSelectionButtons);
     fabricCanvas.on("selection:cleared", updateSelectionButtons);
+    fabricCanvas.on("mouse:down", handleShapeMouseDown);
+    fabricCanvas.on("mouse:move", handleShapeMouseMove);
+    fabricCanvas.on("mouse:up", handleShapeMouseUp);
 
     await new Promise((resolve) => {
       fabric.Image.fromURL(pageState.bgDataUrl, (img) => {
@@ -1409,6 +1504,9 @@
     resetZoom();
     addTextBtn.disabled = false;
     uploadImageBtn.disabled = false;
+    [penToolBtn, highlightToolBtn, lineToolBtn, arrowToolBtn, rectToolBtn, ellipseToolBtn,
+      strokeColorInput, strokeWidthSlider].forEach((el) => { el.disabled = false; });
+    setActiveTool("select"); // drawing tools always reset when switching pages
     updatePasteHintVisibility();
     updateSelectionButtons();
   }
@@ -1608,6 +1706,28 @@
 
     fontSizeSlider.disabled = kind !== "text";
     if (kind === "text") fontSizeSlider.value = Math.round(obj.fontSize);
+
+    // Reflect the selected shape/stroke's own color+width in the tool
+    // inputs so editing them updates that object (handled by the input
+    // listeners below) rather than only affecting the *next* new shape.
+    const isStrokeKind = kind === "rect" || kind === "ellipse" || kind === "path";
+    if (isStrokeKind && obj.stroke) {
+      strokeColorInput.value = rgbaToHex(obj.stroke) || strokeColorInput.value;
+    }
+    if (isStrokeKind && obj.strokeWidth) {
+      strokeWidthSlider.value = Math.round(obj.strokeWidth);
+    }
+  }
+
+  function rgbaToHex(color) {
+    // Accepts "#rrggbb" as-is; converts "rgba(r,g,b,a)" (used by the
+    // highlighter preset) to "#rrggbb" so the color input can display it.
+    if (!color) return null;
+    if (color.startsWith("#")) return color;
+    const m = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    if (!m) return null;
+    const toHex = (n) => Number(n).toString(16).padStart(2, "0");
+    return `#${toHex(m[1])}${toHex(m[2])}${toHex(m[3])}`;
   }
 
   function updateSaveButtonState() {
@@ -1646,6 +1766,194 @@
   zoomLabel.addEventListener("click", resetZoom);
 
   // ---------------------------------------------------------------------
+  // Drawing/annotation tools — pen, highlighter, line, arrow, rectangle,
+  // ellipse. Tools are "sticky" (stay active across multiple shapes until
+  // toggled off, matching most PDF annotators) and reset to "select"
+  // whenever the page changes.
+  // ---------------------------------------------------------------------
+  toolButtons.pen = penToolBtn;
+  toolButtons.highlight = highlightToolBtn;
+  toolButtons.line = lineToolBtn;
+  toolButtons.arrow = arrowToolBtn;
+  toolButtons.rect = rectToolBtn;
+  toolButtons.ellipse = ellipseToolBtn;
+
+  function setActiveTool(tool) {
+    activeTool = activeTool === tool ? "select" : tool;
+    Object.entries(toolButtons).forEach(([name, btn]) => btn.classList.toggle("active", name === activeTool));
+    applyToolMode();
+  }
+
+  function hexToRgba(hex, alpha) {
+    const clean = hex.replace("#", "");
+    const r = parseInt(clean.substring(0, 2), 16);
+    const g = parseInt(clean.substring(2, 4), 16);
+    const b = parseInt(clean.substring(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  function applyToolMode() {
+    if (!fabricCanvas) return;
+    fabricCanvas.discardActiveObject();
+
+    const isFreehand = activeTool === "pen" || activeTool === "highlight";
+    fabricCanvas.isDrawingMode = isFreehand;
+    if (isFreehand) {
+      const brush = new fabric.PencilBrush(fabricCanvas);
+      const width = Number(strokeWidthSlider.value);
+      if (activeTool === "highlight") {
+        brush.color = hexToRgba(strokeColorInput.value, 0.35);
+        brush.width = Math.max(16, width * 4);
+      } else {
+        brush.color = strokeColorInput.value;
+        brush.width = width;
+      }
+      fabricCanvas.freeDrawingBrush = brush;
+    }
+
+    const isSelect = activeTool === "select";
+    fabricCanvas.selection = isSelect;
+    fabricCanvas.forEachObject((o) => { o.selectable = isSelect; o.evented = isSelect; });
+    fabricCanvas.defaultCursor = isSelect ? "default" : "crosshair";
+    fabricCanvas.hoverCursor = isSelect ? "move" : "crosshair";
+    fabricCanvas.renderAll();
+    updateSelectionButtons();
+  }
+
+  Object.entries(toolButtons).forEach(([name, btn]) => btn.addEventListener("click", () => setActiveTool(name)));
+
+  function buildStraightPathD(start, end, withArrowhead, strokeWidth) {
+    let d = `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
+    if (withArrowhead) {
+      const angle = Math.atan2(end.y - start.y, end.x - start.x);
+      const headLen = Math.max(12, strokeWidth * 4);
+      const spread = Math.PI / 7;
+      const h1x = end.x - headLen * Math.cos(angle - spread);
+      const h1y = end.y - headLen * Math.sin(angle - spread);
+      const h2x = end.x - headLen * Math.cos(angle + spread);
+      const h2y = end.y - headLen * Math.sin(angle + spread);
+      d += ` M ${h1x} ${h1y} L ${end.x} ${end.y} L ${h2x} ${h2y}`;
+    }
+    return d;
+  }
+
+  function handleShapeMouseDown(opt) {
+    const isShapeTool = activeTool === "rect" || activeTool === "ellipse" || activeTool === "line" || activeTool === "arrow";
+    if (!isShapeTool || !fabricCanvas) return;
+
+    const pointer = fabricCanvas.getPointer(opt.e);
+    shapeDragStart = pointer;
+    const color = strokeColorInput.value;
+    const width = Number(strokeWidthSlider.value);
+    const commonProps = {
+      stroke: color, strokeWidth: width, fill: null,
+      originX: "left", originY: "top",
+      selectable: false, evented: false,
+    };
+
+    if (activeTool === "rect") {
+      shapeDragObj = new fabric.Rect({ ...commonProps, left: pointer.x, top: pointer.y, width: 1, height: 1 });
+      shapeDragObj.__layerKind = "rect";
+    } else if (activeTool === "ellipse") {
+      shapeDragObj = new fabric.Ellipse({ ...commonProps, left: pointer.x, top: pointer.y, rx: 1, ry: 1 });
+      shapeDragObj.__layerKind = "ellipse";
+    } else {
+      const d = buildStraightPathD(pointer, pointer, activeTool === "arrow", width);
+      shapeDragObj = new fabric.Path(d, { ...commonProps });
+      shapeDragObj.__layerKind = "path";
+      shapeDragObj.__isArrow = activeTool === "arrow";
+      lockRotationOnly(shapeDragObj);
+    }
+
+    // Added silently (isRestoring suppresses the history-snapshot listener)
+    // — the *only* history entry for this whole drag gesture is pushed once,
+    // explicitly, in handleShapeMouseUp below.
+    isRestoring = true;
+    fabricCanvas.add(shapeDragObj);
+    isRestoring = false;
+  }
+
+  function handleShapeMouseMove(opt) {
+    if (!shapeDragObj || !shapeDragStart || !fabricCanvas) return;
+    const pointer = fabricCanvas.getPointer(opt.e);
+
+    if (activeTool === "rect") {
+      shapeDragObj.set({
+        left: Math.min(shapeDragStart.x, pointer.x),
+        top: Math.min(shapeDragStart.y, pointer.y),
+        width: Math.abs(pointer.x - shapeDragStart.x),
+        height: Math.abs(pointer.y - shapeDragStart.y),
+      });
+      shapeDragObj.setCoords();
+    } else if (activeTool === "ellipse") {
+      shapeDragObj.set({
+        left: Math.min(shapeDragStart.x, pointer.x),
+        top: Math.min(shapeDragStart.y, pointer.y),
+        rx: Math.abs(pointer.x - shapeDragStart.x) / 2,
+        ry: Math.abs(pointer.y - shapeDragStart.y) / 2,
+      });
+      shapeDragObj.setCoords();
+    } else {
+      // Straight-line geometry changes shape entirely on every move, so the
+      // path object is rebuilt rather than mutated in place.
+      isRestoring = true;
+      fabricCanvas.remove(shapeDragObj);
+      const width = Number(strokeWidthSlider.value);
+      const d = buildStraightPathD(shapeDragStart, pointer, shapeDragObj.__isArrow, width);
+      const isArrow = shapeDragObj.__isArrow;
+      shapeDragObj = new fabric.Path(d, {
+        stroke: strokeColorInput.value, strokeWidth: width, fill: null,
+        originX: "left", originY: "top", selectable: false, evented: false,
+      });
+      shapeDragObj.__layerKind = "path";
+      shapeDragObj.__isArrow = isArrow;
+      lockRotationOnly(shapeDragObj);
+      fabricCanvas.add(shapeDragObj);
+      isRestoring = false;
+    }
+    fabricCanvas.renderAll();
+  }
+
+  function handleShapeMouseUp() {
+    if (!shapeDragObj) return;
+    const obj = shapeDragObj;
+    shapeDragObj = null;
+    shapeDragStart = null;
+
+    // Drop degenerate shapes from a plain click (no real drag).
+    const tooSmall = (obj.width !== undefined && obj.width < 3 && obj.height < 3)
+      || (obj.rx !== undefined && obj.rx < 3 && obj.ry < 3)
+      || (obj.__layerKind === "path" && obj.width < 3 && obj.height < 3);
+    if (tooSmall) {
+      fabricCanvas.remove(obj);
+      return;
+    }
+
+    obj.set({ selectable: true, evented: true });
+    obj.setCoords();
+    fabricCanvas.setActiveObject(obj);
+    fabricCanvas.renderAll();
+    onCanvasChanged(); // single history entry for the finished shape
+  }
+
+  strokeColorInput.addEventListener("input", () => {
+    const obj = fabricCanvas ? fabricCanvas.getActiveObject() : null;
+    if (obj && obj.__layerKind && (obj.stroke !== undefined)) {
+      obj.set("stroke", strokeColorInput.value);
+      fabricCanvas.renderAll();
+      scheduleDebouncedHistoryPush();
+    }
+  });
+  strokeWidthSlider.addEventListener("input", () => {
+    const obj = fabricCanvas ? fabricCanvas.getActiveObject() : null;
+    if (obj && obj.__layerKind && (obj.strokeWidth !== undefined)) {
+      obj.set("strokeWidth", Number(strokeWidthSlider.value));
+      fabricCanvas.renderAll();
+      scheduleDebouncedHistoryPush();
+    }
+  });
+
+  // ---------------------------------------------------------------------
   // Layer <-> Fabric object bridging (serialize / restore / add)
   // ---------------------------------------------------------------------
   function serializeCurrentLayers() {
@@ -1664,6 +1972,20 @@
       };
       if (obj.__layerKind === "text") {
         return { ...base, text: obj.text, fontSize: obj.fontSize };
+      }
+      if (obj.__layerKind === "rect" || obj.__layerKind === "ellipse") {
+        return { ...base, stroke: obj.stroke, strokeWidth: obj.strokeWidth };
+      }
+      if (obj.__layerKind === "path") {
+        return {
+          ...base,
+          stroke: obj.stroke,
+          strokeWidth: obj.strokeWidth,
+          // Shallow-per-segment clone: each segment is a flat array of
+          // primitives (e.g. ["Q", x1, y1, x, y]), so .slice() is enough to
+          // avoid aliasing the live object's array into this snapshot.
+          pathData: obj.path.map((seg) => seg.slice()),
+        };
       }
       return {
         ...base,
@@ -1692,6 +2014,51 @@
         textObj.__layerKind = "text";
         fabricCanvas.add(textObj);
         resolve(textObj);
+        return;
+      }
+
+      if (data.kind === "rect") {
+        const rectObj = new fabric.Rect({
+          left: data.left, top: data.top,
+          width: data.naturalWidth, height: data.naturalHeight,
+          scaleX: data.scaleX, scaleY: data.scaleY, angle: data.angle || 0,
+          opacity: data.opacity ?? 1,
+          stroke: data.stroke, strokeWidth: data.strokeWidth, fill: null,
+          originX: "left", originY: "top",
+        });
+        rectObj.__layerKind = "rect";
+        fabricCanvas.add(rectObj);
+        resolve(rectObj);
+        return;
+      }
+
+      if (data.kind === "ellipse") {
+        const ellipseObj = new fabric.Ellipse({
+          left: data.left, top: data.top,
+          rx: data.naturalWidth / 2, ry: data.naturalHeight / 2,
+          scaleX: data.scaleX, scaleY: data.scaleY, angle: data.angle || 0,
+          opacity: data.opacity ?? 1,
+          stroke: data.stroke, strokeWidth: data.strokeWidth, fill: null,
+          originX: "left", originY: "top",
+        });
+        ellipseObj.__layerKind = "ellipse";
+        fabricCanvas.add(ellipseObj);
+        resolve(ellipseObj);
+        return;
+      }
+
+      if (data.kind === "path") {
+        const pathObj = new fabric.Path(data.pathData, {
+          left: data.left, top: data.top,
+          scaleX: data.scaleX, scaleY: data.scaleY, angle: 0, // rotation locked, see lockRotationOnly
+          opacity: data.opacity ?? 1,
+          stroke: data.stroke, strokeWidth: data.strokeWidth, fill: null,
+          originX: "left", originY: "top",
+        });
+        pathObj.__layerKind = "path";
+        lockRotationOnly(pathObj);
+        fabricCanvas.add(pathObj);
+        resolve(pathObj);
         return;
       }
 
@@ -1816,9 +2183,13 @@
       cloned.__layerKind = obj.__layerKind;
       if (obj.__layerKind === "image") {
         cloned.__layerData = { ...obj.__layerData };
-      } else {
+      } else if (obj.__layerKind === "text") {
         lockTextControls(cloned);
+      } else if (obj.__layerKind === "path") {
+        cloned.set({ fill: null });
+        lockRotationOnly(cloned);
       }
+      // rect/ellipse: no lock — full move/resize/rotate, same as images.
       fabricCanvas.add(cloned);
       fabricCanvas.setActiveObject(cloned);
       fabricCanvas.renderAll();
@@ -1887,6 +2258,11 @@
       return;
     }
     if (!refineModal.hidden) return; // don't leak shortcuts into the canvas while the modal is open
+
+    if (e.key === "Escape" && activeTool !== "select") {
+      setActiveTool("select");
+      return;
+    }
 
     const tag = document.activeElement ? document.activeElement.tagName : "";
     const isTyping = tag === "INPUT" || tag === "TEXTAREA";
@@ -2261,6 +2637,151 @@
     });
   }
 
+  function parseStrokeColor(str) {
+    // Returns { color, alpha }. The highlighter preset bakes its
+    // translucency into an rgba() stroke string rather than Fabric's
+    // object-level opacity, so alpha has to be pulled out of the color
+    // string itself when present (alpha stays null for plain hex colors,
+    // in which case the caller falls back to the layer's own opacity).
+    if (!str) return { color: rgb(0, 0, 0), alpha: null };
+    const hexMatch = str.match(/^#([0-9a-f]{6})$/i);
+    if (hexMatch) {
+      const n = parseInt(hexMatch[1], 16);
+      return { color: rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255), alpha: null };
+    }
+    const rgbaMatch = str.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/i);
+    if (rgbaMatch) {
+      return {
+        color: rgb(Number(rgbaMatch[1]) / 255, Number(rgbaMatch[2]) / 255, Number(rgbaMatch[3]) / 255),
+        alpha: rgbaMatch[4] !== undefined ? Number(rgbaMatch[4]) : null,
+      };
+    }
+    return { color: rgb(0, 0, 0), alpha: null };
+  }
+
+  function embedRectLayer(page, layer, canvasWidth, canvasHeight, centerCanvas) {
+    const { width: pageWidth, height: pageHeight } = page.getSize();
+    const scaleX = pageWidth / canvasWidth;
+    const scaleY = pageHeight / canvasHeight;
+
+    const W = layer.naturalWidth * layer.scaleX;
+    const H = layer.naturalHeight * layer.scaleY;
+    const fabricAngle = layer.angle || 0;
+    const pdfWidth = W * scaleX;
+    const pdfHeight = H * scaleY;
+    const pdfAngleDeg = (360 - (fabricAngle % 360)) % 360;
+
+    const centerPdfX = centerCanvas.x * scaleX;
+    const centerPdfY = pageHeight - centerCanvas.y * scaleY;
+
+    // Same anchor convention as embedImageLayer (confirmed against pdf-lib's
+    // own source): drawRectangle rotates around its (x,y) anchor — the
+    // pre-rotation bottom-left corner — not the center. Reuse the identical
+    // center-to-anchor back-solve.
+    const angleRad = (pdfAngleDeg * Math.PI) / 180;
+    const halfW = pdfWidth / 2;
+    const halfH = pdfHeight / 2;
+    const offsetX = halfW * Math.cos(angleRad) - halfH * Math.sin(angleRad);
+    const offsetY = halfW * Math.sin(angleRad) + halfH * Math.cos(angleRad);
+
+    const { color, alpha } = parseStrokeColor(layer.stroke);
+    page.drawRectangle({
+      x: centerPdfX - offsetX,
+      y: centerPdfY - offsetY,
+      width: pdfWidth,
+      height: pdfHeight,
+      rotate: degrees(pdfAngleDeg),
+      borderColor: color,
+      borderWidth: (layer.strokeWidth || 1) * scaleX,
+      borderOpacity: alpha !== null ? alpha : (layer.opacity ?? 1),
+    });
+  }
+
+  function embedEllipseLayer(page, layer, canvasWidth, canvasHeight, centerCanvas) {
+    const { width: pageWidth, height: pageHeight } = page.getSize();
+    const scaleX = pageWidth / canvasWidth;
+    const scaleY = pageHeight / canvasHeight;
+
+    const W = layer.naturalWidth * layer.scaleX;
+    const H = layer.naturalHeight * layer.scaleY;
+    const fabricAngle = layer.angle || 0;
+    const pdfAngleDeg = (360 - (fabricAngle % 360)) % 360;
+
+    // pdf-lib's drawEllipse anchors at the CENTER (confirmed against its
+    // source), unlike drawRectangle/drawImage — no offset-from-center
+    // back-solve needed here, the true center converts directly.
+    const { color, alpha } = parseStrokeColor(layer.stroke);
+    page.drawEllipse({
+      x: centerCanvas.x * scaleX,
+      y: pageHeight - centerCanvas.y * scaleY,
+      xScale: (W * scaleX) / 2,
+      yScale: (H * scaleY) / 2,
+      rotate: degrees(pdfAngleDeg),
+      borderColor: color,
+      borderWidth: (layer.strokeWidth || 1) * scaleX,
+      borderOpacity: alpha !== null ? alpha : (layer.opacity ?? 1),
+    });
+  }
+
+  function getAbsolutePathCommands(liveObj, layer) {
+    // Resolves every path point to absolute canvas-pixel space using
+    // Fabric's OWN transform math (calcTransformMatrix + pathOffset)
+    // instead of hand-derived trig — the same "trust Fabric's own numbers"
+    // principle that fixed the image rotation bug earlier. Rotation is
+    // locked to 0 for path-kind layers (see lockRotationOnly), so this
+    // only really needs to resolve translate + scale, but works generally.
+    const obj = liveObj || new fabric.Path(layer.pathData, {
+      left: layer.left, top: layer.top,
+      scaleX: layer.scaleX, scaleY: layer.scaleY, angle: 0,
+      originX: "left", originY: "top",
+    });
+    const matrix = obj.calcTransformMatrix();
+    const offset = obj.pathOffset || { x: 0, y: 0 };
+    return obj.path.map((seg) => {
+      const cmd = seg[0];
+      const nums = seg.slice(1);
+      const out = [cmd];
+      for (let i = 0; i < nums.length; i += 2) {
+        const local = { x: nums[i] - offset.x, y: nums[i + 1] - offset.y };
+        const abs = fabric.util.transformPoint(local, matrix);
+        out.push(abs.x, abs.y);
+      }
+      return out;
+    });
+  }
+
+  function embedPathLayer(page, layer, canvasWidth, canvasHeight, liveObj) {
+    const { width: pageWidth, height: pageHeight } = page.getSize();
+    const scaleX = pageWidth / canvasWidth;
+    const scaleY = pageHeight / canvasHeight;
+
+    const absCommands = getAbsolutePathCommands(liveObj, layer);
+    // pdf-lib's drawSvgPath applies translate(x,y) -> rotate -> scale(1,-1)
+    // (the comment in its own source: "SVG path Y axis is opposite
+    // pdf-lib's") before drawing the raw path commands. Leaving x/y/rotate
+    // at their identity defaults and pre-negating each PDF y-coordinate
+    // here lands every point at the correct final position without having
+    // to reproduce that anchor/rotation pipeline by hand.
+    const d = absCommands.map((seg) => {
+      const cmd = seg[0];
+      const nums = seg.slice(1);
+      const converted = [];
+      for (let i = 0; i < nums.length; i += 2) {
+        const pdfX = nums[i] * scaleX;
+        const pdfY = pageHeight - nums[i + 1] * scaleY;
+        converted.push(pdfX, -pdfY);
+      }
+      return [cmd, ...converted].join(" ");
+    }).join(" ");
+
+    const { color, alpha } = parseStrokeColor(layer.stroke);
+    page.drawSvgPath(d, {
+      borderColor: color,
+      borderWidth: (layer.strokeWidth || 1) * scaleX,
+      borderOpacity: alpha !== null ? alpha : (layer.opacity ?? 1),
+    });
+  }
+
   saveBtn.addEventListener("click", async () => {
     if (!currentPdfFile) {
       alert("Upload a PDF first.");
@@ -2309,6 +2830,13 @@
 
           if (layer.kind === "text") {
             embedTextLayer(page, layer, state.canvasWidth, state.canvasHeight, centerCanvas, helveticaFont);
+          } else if (layer.kind === "rect") {
+            embedRectLayer(page, layer, state.canvasWidth, state.canvasHeight, centerCanvas);
+          } else if (layer.kind === "ellipse") {
+            embedEllipseLayer(page, layer, state.canvasWidth, state.canvasHeight, centerCanvas);
+          } else if (layer.kind === "path") {
+            const liveObj = isLivePage && liveObjects[j] ? liveObjects[j] : null;
+            embedPathLayer(page, layer, state.canvasWidth, state.canvasHeight, liveObj);
           } else {
             await embedImageLayer(outDoc, page, layer, state.canvasWidth, state.canvasHeight, centerCanvas);
           }
