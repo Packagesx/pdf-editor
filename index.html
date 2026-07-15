@@ -22,9 +22,10 @@
     - Paste (Ctrl+V) or drag-and-drop an image onto the canvas to add a new
       image layer each time — multiple images per page, each independently
       selectable / movable / resizable / rotatable / duplicable.
-    - "Add text" drops a simple text label (drag to move, font-size slider;
-      rotation and resize are intentionally locked for text — see note near
-      lockTextControls() for why).
+    - "Add text" drops a text label — move, rotate, and corner-resize it
+      like any other layer, plus a font-family/bold/italic/color toolbar
+      and a font-size slider (see configureTextControls() for how resizing
+      stays crisp instead of just stretching the rendered text).
     - Delete button + Delete/Backspace key removes the selected layer.
       Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo/redo, Ctrl+D duplicate, arrow
       keys nudge the selected layer by 1px (10px with Shift) — all tracked
@@ -269,6 +270,35 @@
   }
   #strokeWidthSlider:disabled { opacity: 0.4; }
 
+  #textFontSelect {
+    height: 28px;
+    padding: 0 6px;
+    border-radius: 6px;
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-2);
+    color: var(--ink);
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  #textFontSelect:disabled { cursor: not-allowed; opacity: 0.4; }
+
+  #textColorInput {
+    width: 26px;
+    height: 26px;
+    margin-left: 4px;
+    padding: 0;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+  }
+  #textColorInput:disabled { cursor: not-allowed; opacity: 0.4; }
+  #textColorInput::-webkit-color-swatch-wrapper { padding: 2px; }
+  #textColorInput::-webkit-color-swatch { border: none; border-radius: 4px; }
+
+  #textBoldBtn { font-weight: 800; }
+  #textItalicBtn { font-style: italic; }
+
   /* ---------------------------------------------------------------- */
   /* Layout                                                            */
   /* ---------------------------------------------------------------- */
@@ -283,7 +313,7 @@
   .dropzone {
     width: 100%;
     max-width: 620px;
-    margin-top: 6vh;
+    margin: auto; /* centers both axes inside the flex <main> */
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -388,6 +418,10 @@
     background: var(--surface-2);
     text-align: left;
   }
+  /* Same specificity trap as .modal-overlay: an author `display: flex` on
+     the base class silently wins over the UA `[hidden] { display: none }`
+     rule, which would otherwise make the banner impossible to dismiss. */
+  .recent-file-banner[hidden] { display: none; }
   .recent-file-banner svg { width: 18px; height: 18px; color: var(--muted); flex-shrink: 0; }
   .recent-file-text { flex: 1; font-size: 13px; color: var(--muted); min-width: 0; }
   .recent-file-text strong { color: var(--ink); font-weight: 600; word-break: break-all; }
@@ -1080,6 +1114,17 @@
         <input type="range" id="fontSizeSlider" min="8" max="120" value="24" disabled />
       </div>
 
+      <div class="toolbar-group" id="textFormatGroup">
+        <select id="textFontSelect" title="Font" disabled>
+          <option value="helvetica">Helvetica</option>
+          <option value="times">Times</option>
+          <option value="courier">Courier</option>
+        </select>
+        <button class="icon-btn" id="textBoldBtn" title="Bold" type="button" disabled>B</button>
+        <button class="icon-btn" id="textItalicBtn" title="Italic" type="button" disabled>I</button>
+        <input type="color" id="textColorInput" value="#111111" title="Text color" disabled />
+      </div>
+
       <span class="divider"></span>
 
       <span class="file-name" id="fileNameLabel"></span>
@@ -1232,6 +1277,10 @@
   const deleteBtn = document.getElementById("deleteBtn");
   const opacitySlider = document.getElementById("opacitySlider");
   const fontSizeSlider = document.getElementById("fontSizeSlider");
+  const textFontSelect = document.getElementById("textFontSelect");
+  const textBoldBtn = document.getElementById("textBoldBtn");
+  const textItalicBtn = document.getElementById("textItalicBtn");
+  const textColorInput = document.getElementById("textColorInput");
 
   const penToolBtn = document.getElementById("penToolBtn");
   const highlightToolBtn = document.getElementById("highlightToolBtn");
@@ -1286,8 +1335,9 @@
   //     history: { stack: LayerData[][], pointer: number } }
   // LayerData (image) = { kind:"image", blob, originalBlob, aiBlob, left,
   //   top, scaleX, scaleY, angle, naturalWidth, naturalHeight, opacity }
-  // LayerData (text)  = { kind:"text", text, fontSize, left, top, scaleX,
-  //   scaleY, angle, naturalWidth, naturalHeight, opacity }
+  // LayerData (text)  = { kind:"text", text, fontSize, fontFamily, bold,
+  //   italic, color, left, top, scaleX, scaleY, angle, naturalWidth,
+  //   naturalHeight, opacity }
   const pageCache = new Map();
 
   // Page management (thumbnail sidebar, rotate, delete, reorder). These are
@@ -1349,30 +1399,78 @@
     borderColor: "#49de78",
   };
 
-  // Text layers intentionally cannot be rotated or drag-resized: pdf-lib
-  // positions text by its baseline using font metrics that only
-  // approximately match the browser's rendering of the same font, so an
-  // arbitrary rotation/scale transform (which compounds that mismatch) is
-  // far more likely to visibly drift between the on-screen preview and the
-  // exported PDF than a plain axis-aligned label is. Font size is exposed
-  // via a slider instead, which keeps the export math simple and reliable.
-  function lockTextControls(obj) {
+  // Maps our 3 font-family choices to a CSS stack (canvas preview) and to
+  // pdf-lib's built-in StandardFonts (export) — kept in one table so the
+  // two never drift apart. All 4 weight/style combos are one of the PDF
+  // spec's 14 standard fonts, so export never needs to embed/fetch a
+  // custom font file — the same reliability tradeoff as the rest of the
+  // app's font handling.
+  const TEXT_FONTS = {
+    helvetica: {
+      css: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+      regular: StandardFonts.Helvetica,
+      bold: StandardFonts.HelveticaBold,
+      italic: StandardFonts.HelveticaOblique,
+      boldItalic: StandardFonts.HelveticaBoldOblique,
+    },
+    times: {
+      css: '"Times New Roman", Times, serif',
+      regular: StandardFonts.TimesRoman,
+      bold: StandardFonts.TimesRomanBold,
+      italic: StandardFonts.TimesRomanItalic,
+      boldItalic: StandardFonts.TimesRomanBoldItalic,
+    },
+    courier: {
+      css: '"Courier New", Courier, monospace',
+      regular: StandardFonts.Courier,
+      bold: StandardFonts.CourierBold,
+      italic: StandardFonts.CourierOblique,
+      boldItalic: StandardFonts.CourierBoldOblique,
+    },
+  };
+  function textFontCssFamily(key) {
+    return (TEXT_FONTS[key] || TEXT_FONTS.helvetica).css;
+  }
+
+  // Text layers can be rotated and resized freely. Resizing deliberately
+  // funnels through fontSize rather than scaleX/scaleY — dragging a corner
+  // recalculates fontSize and snaps the scale back to 1 on every tick (the
+  // standard Fabric.js pattern for crisp, non-blurry text resizing), and
+  // lockUniScaling keeps corner-drags proportional so scaleX/scaleY never
+  // diverge. That means text always renders at scale (1,1) with the true
+  // size baked into fontSize, so the PDF export only ever needs a single
+  // rotation-anchor formula (the same one already proven for rectangles)
+  // instead of also handling non-uniform stretching.
+  function configureTextControls(obj) {
     obj.setControlsVisibility({
       mt: false, mb: false, ml: false, mr: false,
-      tl: false, tr: false, bl: false, br: false,
-      mtr: false,
+      tl: true, tr: true, bl: true, br: true,
+      mtr: true,
     });
-    obj.lockRotation = true;
-    obj.lockScalingX = true;
-    obj.lockScalingY = true;
+    obj.lockRotation = false;
+    obj.lockScalingX = false;
+    obj.lockScalingY = false;
+    obj.lockUniScaling = true;
+    if (!obj.__hasScalingNormalizer) {
+      obj.__hasScalingNormalizer = true;
+      obj.on("scaling", () => {
+        const factor = obj.scaleY || obj.scaleX || 1;
+        if (factor === 1) return;
+        obj.set({
+          fontSize: Math.max(4, Math.round(obj.fontSize * factor)),
+          scaleX: 1,
+          scaleY: 1,
+        });
+        obj.setCoords();
+      });
+    }
   }
 
   // Pen/highlighter/line/arrow strokes ("path" kind) can be moved and
-  // resized freely, but rotation is deliberately locked — same tradeoff as
-  // lockTextControls above: it keeps the export math (translate + scale
-  // only, no rotation-anchor trig) simple and provably correct instead of
-  // risking another rotation/position mismatch bug like the ones already
-  // fixed twice for images.
+  // resized freely, but rotation is deliberately locked — it keeps the
+  // export math (translate + scale only, no rotation-anchor trig) simple
+  // and provably correct instead of risking another rotation/position
+  // mismatch bug like the ones already fixed twice for images.
   function lockRotationOnly(obj) {
     obj.setControlsVisibility({ mtr: false });
     obj.lockRotation = true;
@@ -1580,7 +1678,10 @@
     activeTool = "select";
     Object.values(toolButtons).forEach((btn) => btn.classList.remove("active"));
     [penToolBtn, highlightToolBtn, lineToolBtn, arrowToolBtn, rectToolBtn, ellipseToolBtn, redactToolBtn,
-      strokeColorInput, strokeWidthSlider, signatureBtn, stampBtn].forEach((el) => { el.disabled = true; });
+      strokeColorInput, strokeWidthSlider, signatureBtn, stampBtn,
+      textFontSelect, textBoldBtn, textItalicBtn, textColorInput].forEach((el) => { el.disabled = true; });
+    textBoldBtn.classList.remove("active");
+    textItalicBtn.classList.remove("active");
   });
 
   // Render (or re-activate) a given 0-based page index, persisting the
@@ -1677,7 +1778,8 @@
     addTextBtn.disabled = false;
     uploadImageBtn.disabled = false;
     [penToolBtn, highlightToolBtn, lineToolBtn, arrowToolBtn, rectToolBtn, ellipseToolBtn, redactToolBtn,
-      strokeColorInput, strokeWidthSlider, signatureBtn, stampBtn].forEach((el) => { el.disabled = false; });
+      strokeColorInput, strokeWidthSlider, signatureBtn, stampBtn,
+      textFontSelect, textBoldBtn, textItalicBtn, textColorInput].forEach((el) => { el.disabled = false; });
     setActiveTool("select"); // drawing tools always reset when switching pages
     updatePasteHintVisibility();
     updateSelectionButtons();
@@ -1878,6 +1980,15 @@
 
     fontSizeSlider.disabled = kind !== "text";
     if (kind === "text") fontSizeSlider.value = Math.round(obj.fontSize);
+
+    // Same idea as the stroke inputs below, but for the selected text
+    // object's own font choice/weight/style/color.
+    if (kind === "text") {
+      textFontSelect.value = obj.__textFontKey || "helvetica";
+      textBoldBtn.classList.toggle("active", !!obj.__textBold);
+      textItalicBtn.classList.toggle("active", !!obj.__textItalic);
+      textColorInput.value = rgbaToHex(obj.fill) || textColorInput.value;
+    }
 
     // Reflect the selected shape/stroke's own color+width in the tool
     // inputs so editing them updates that object (handled by the input
@@ -2135,6 +2246,52 @@
     }
   });
 
+  // Text formatting controls double as both "style the selected text" (when
+  // something is selected) and "defaults for the next text box" (read
+  // directly from these inputs in the addTextBtn handler above).
+  textFontSelect.addEventListener("input", () => {
+    const obj = fabricCanvas ? fabricCanvas.getActiveObject() : null;
+    if (obj && obj.__layerKind === "text") {
+      applyTextFontStyle(obj, { fontFamily: textFontSelect.value, bold: obj.__textBold, italic: obj.__textItalic });
+      obj.setCoords();
+      fabricCanvas.renderAll();
+      scheduleDebouncedHistoryPush();
+    }
+  });
+  textBoldBtn.addEventListener("click", () => {
+    // The button's own .active state IS the "next text" default (read by
+    // addTextBtn above), so it toggles regardless of selection; it's also
+    // applied live to the selected text object, if any.
+    const bold = !textBoldBtn.classList.contains("active");
+    textBoldBtn.classList.toggle("active", bold);
+    const obj = fabricCanvas ? fabricCanvas.getActiveObject() : null;
+    if (obj && obj.__layerKind === "text") {
+      applyTextFontStyle(obj, { fontFamily: obj.__textFontKey, bold, italic: obj.__textItalic });
+      obj.setCoords();
+      fabricCanvas.renderAll();
+      scheduleDebouncedHistoryPush();
+    }
+  });
+  textItalicBtn.addEventListener("click", () => {
+    const italic = !textItalicBtn.classList.contains("active");
+    textItalicBtn.classList.toggle("active", italic);
+    const obj = fabricCanvas ? fabricCanvas.getActiveObject() : null;
+    if (obj && obj.__layerKind === "text") {
+      applyTextFontStyle(obj, { fontFamily: obj.__textFontKey, bold: obj.__textBold, italic });
+      obj.setCoords();
+      fabricCanvas.renderAll();
+      scheduleDebouncedHistoryPush();
+    }
+  });
+  textColorInput.addEventListener("input", () => {
+    const obj = fabricCanvas ? fabricCanvas.getActiveObject() : null;
+    if (obj && obj.__layerKind === "text") {
+      obj.set("fill", textColorInput.value);
+      fabricCanvas.renderAll();
+      scheduleDebouncedHistoryPush();
+    }
+  });
+
   // ---------------------------------------------------------------------
   // Layer <-> Fabric object bridging (serialize / restore / add)
   // ---------------------------------------------------------------------
@@ -2153,7 +2310,15 @@
         opacity: obj.opacity ?? 1,
       };
       if (obj.__layerKind === "text") {
-        return { ...base, text: obj.text, fontSize: obj.fontSize };
+        return {
+          ...base,
+          text: obj.text,
+          fontSize: obj.fontSize,
+          fontFamily: obj.__textFontKey || "helvetica",
+          bold: !!obj.__textBold,
+          italic: !!obj.__textItalic,
+          color: obj.fill || "#111111",
+        };
       }
       if (obj.__layerKind === "rect" || obj.__layerKind === "ellipse") {
         return {
@@ -2191,14 +2356,18 @@
           left: data.left,
           top: data.top,
           fontSize: data.fontSize,
-          fontFamily: "Helvetica, Arial, sans-serif",
-          fill: "#111111",
+          fill: data.color || "#111111",
           opacity: data.opacity ?? 1,
           originX: "left",
           originY: "top",
-          angle: 0,
+          angle: data.angle || 0,
         });
-        lockTextControls(textObj);
+        applyTextFontStyle(textObj, {
+          fontFamily: data.fontFamily || "helvetica",
+          bold: !!data.bold,
+          italic: !!data.italic,
+        });
+        configureTextControls(textObj);
         textObj.__layerKind = "text";
         fabricCanvas.add(textObj);
         resolve(textObj);
@@ -2364,6 +2533,21 @@
     updateSelectionButtons();
   }
 
+  // Applies our font-family/bold/italic choices to a text object, both as
+  // real Fabric properties (so the on-canvas preview matches) and as
+  // plain custom fields (so serialize/export can read back the *choice*,
+  // not just the resulting CSS string).
+  function applyTextFontStyle(obj, { fontFamily, bold, italic }) {
+    obj.set({
+      fontFamily: textFontCssFamily(fontFamily),
+      fontWeight: bold ? "bold" : "normal",
+      fontStyle: italic ? "italic" : "normal",
+    });
+    obj.__textFontKey = TEXT_FONTS[fontFamily] ? fontFamily : "helvetica";
+    obj.__textBold = !!bold;
+    obj.__textItalic = !!italic;
+  }
+
   function duplicateActiveObject() {
     const obj = fabricCanvas ? fabricCanvas.getActiveObject() : null;
     if (!obj || !obj.__layerKind || obj.type === "activeSelection") return;
@@ -2373,7 +2557,12 @@
       if (obj.__layerKind === "image") {
         cloned.__layerData = { ...obj.__layerData };
       } else if (obj.__layerKind === "text") {
-        lockTextControls(cloned);
+        configureTextControls(cloned);
+        applyTextFontStyle(cloned, {
+          fontFamily: obj.__textFontKey,
+          bold: obj.__textBold,
+          italic: obj.__textItalic,
+        });
       } else if (obj.__layerKind === "path") {
         cloned.set({ fill: null });
         lockRotationOnly(cloned);
@@ -2401,12 +2590,16 @@
       left: pageState.canvasWidth * 0.15,
       top: pageState.canvasHeight * 0.1,
       fontSize,
-      fontFamily: "Helvetica, Arial, sans-serif",
-      fill: "#111111",
+      fill: textColorInput.value,
       originX: "left",
       originY: "top",
     });
-    lockTextControls(textObj);
+    applyTextFontStyle(textObj, {
+      fontFamily: textFontSelect.value,
+      bold: textBoldBtn.classList.contains("active"),
+      italic: textItalicBtn.classList.contains("active"),
+    });
+    configureTextControls(textObj);
     textObj.__layerKind = "text";
 
     fabricCanvas.add(textObj);
@@ -3030,37 +3223,56 @@
     });
   }
 
-  function embedTextLayer(page, layer, canvasWidth, canvasHeight, centerCanvas, helveticaFont) {
+  function embedTextLayer(page, layer, canvasWidth, canvasHeight, centerCanvas, fontsByFamily) {
     const { width: pageWidth, height: pageHeight } = page.getSize();
     const scaleX = pageWidth / canvasWidth;
     const scaleY = pageHeight / canvasHeight;
 
-    // Text is never rotated (see lockTextControls), so the box is always
-    // axis-aligned — no rotation-anchor math needed, just center -> edges.
-    const pdfFontSize = layer.fontSize * scaleY;
-    const pdfWidth = layer.naturalWidth * scaleX;
-    const pdfHeight = layer.naturalHeight * scaleY;
+    const familyFonts = fontsByFamily[layer.fontFamily] || fontsByFamily.helvetica;
+    const font = layer.bold && layer.italic ? familyFonts.boldItalic
+      : layer.bold ? familyFonts.bold
+      : layer.italic ? familyFonts.italic
+      : familyFonts.regular;
+
+    const pdfFontSize = layer.fontSize * (layer.scaleY || 1) * scaleY;
+    const pdfWidth = layer.naturalWidth * (layer.scaleX || 1) * scaleX;
+    const fabricAngle = layer.angle || 0;
+    const pdfAngleDeg = (360 - (fabricAngle % 360)) % 360;
+
+    // pdf-lib positions text by its baseline, not a bounding-box corner.
+    // Use the font's own ascent/descent metrics to find the baseline's
+    // offset from the box's vertical center, so the text sits at the same
+    // visual height as the box Fabric was showing on screen.
+    const ascent = font.heightAtSize(pdfFontSize, { descender: false });
+    const totalHeight = font.heightAtSize(pdfFontSize, { descender: true });
+    const descent = totalHeight - ascent;
+    const vOffset = (ascent - descent) / 2; // baseline -> box vertical center
+
     const centerPdfX = centerCanvas.x * scaleX;
     const centerPdfY = pageHeight - centerCanvas.y * scaleY;
 
-    // pdf-lib positions text by its baseline, not a bounding-box corner.
-    // Convert the box's bottom edge to a baseline using the font's own
-    // descent metric so the text sits at the same visual height as the
-    // box Fabric was showing on screen.
-    const ascent = helveticaFont.heightAtSize(pdfFontSize, { descender: false });
-    const totalHeight = helveticaFont.heightAtSize(pdfFontSize, { descender: true });
-    const descent = totalHeight - ascent;
+    // Text is now rotatable, so it needs the same rotation-anchor back-solve
+    // as embedRectLayer. Confirmed against pdf-lib's own source
+    // (setTextMatrix / rotateAndSkewTextRadiansAndTranslate): the (x,y)
+    // passed to drawText is a literal Tm translation component, so it is
+    // the point the text rotates around — the exact same "pre-rotation
+    // anchor" convention as drawRectangle/drawImage, just with the
+    // baseline-start point standing in for the bottom-left corner.
+    const angleRad = (pdfAngleDeg * Math.PI) / 180;
+    const halfW = pdfWidth / 2;
+    const offsetX = halfW * Math.cos(angleRad) - vOffset * Math.sin(angleRad);
+    const offsetY = halfW * Math.sin(angleRad) + vOffset * Math.cos(angleRad);
 
-    const pdfX = centerPdfX - pdfWidth / 2;
-    const pdfY = centerPdfY - pdfHeight / 2 + descent;
+    const { color, alpha } = parseStrokeColor(layer.color);
 
     page.drawText(layer.text || "", {
-      x: pdfX,
-      y: pdfY,
+      x: centerPdfX - offsetX,
+      y: centerPdfY - offsetY,
       size: pdfFontSize,
-      font: helveticaFont,
-      color: rgb(0.07, 0.07, 0.07),
-      opacity: layer.opacity ?? 1,
+      font,
+      rotate: degrees(pdfAngleDeg),
+      color,
+      opacity: alpha !== null ? alpha : (layer.opacity ?? 1),
     });
   }
 
@@ -3240,7 +3452,21 @@
       const pdfBytes = await currentPdfFile.arrayBuffer();
       const srcDoc = await PDFDocument.load(pdfBytes);
       const outDoc = await PDFDocument.create();
-      const helveticaFont = await outDoc.embedFont(StandardFonts.Helvetica);
+
+      // All 12 combos (3 families x regular/bold/italic/bold-italic) are
+      // standard PDF fonts — embedding is metadata-only (no network fetch,
+      // no font-file bytes), so embedding the full set up front is cheap
+      // and avoids conditional per-layer embedding logic.
+      const fontsByFamily = {};
+      for (const key of Object.keys(TEXT_FONTS)) {
+        const spec = TEXT_FONTS[key];
+        fontsByFamily[key] = {
+          regular: await outDoc.embedFont(spec.regular),
+          bold: await outDoc.embedFont(spec.bold),
+          italic: await outDoc.embedFont(spec.italic),
+          boldItalic: await outDoc.embedFont(spec.boldItalic),
+        };
+      }
 
       const copiedPages = await outDoc.copyPages(srcDoc, pageOrder);
       for (let i = 0; i < copiedPages.length; i++) {
@@ -3266,7 +3492,7 @@
             : computeCanvasCenterFromLayer(layer);
 
           if (layer.kind === "text") {
-            embedTextLayer(page, layer, state.canvasWidth, state.canvasHeight, centerCanvas, helveticaFont);
+            embedTextLayer(page, layer, state.canvasWidth, state.canvasHeight, centerCanvas, fontsByFamily);
           } else if (layer.kind === "rect") {
             embedRectLayer(page, layer, state.canvasWidth, state.canvasHeight, centerCanvas);
           } else if (layer.kind === "ellipse") {
