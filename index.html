@@ -42,7 +42,7 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Caveat:wght@500;700&display=swap" rel="stylesheet" />
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
@@ -533,13 +533,14 @@
   /* Floating "paste here" hint, shown while the current page has no layers */
   .paste-hint {
     position: absolute;
-    inset: 0;
+    top: 14px;
+    left: 0;
+    right: 0;
     z-index: var(--z-hint);
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     pointer-events: none;
-    background: linear-gradient(oklch(16% 0.015 250 / 55%), oklch(16% 0.015 250 / 55%));
     opacity: 0;
     transition: opacity 0.3s var(--ease);
   }
@@ -777,6 +778,86 @@
     flex-basis: 100%;
   }
 
+  #signatureDrawCanvas {
+    display: block;
+    max-width: 100%;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 560 / 220;
+    cursor: crosshair;
+    touch-action: none;
+    border-radius: 4px;
+  }
+
+  .sig-text-input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-2);
+    color: var(--ink);
+    font-size: 14px;
+    margin-bottom: 14px;
+  }
+  .sig-text-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .sig-type-preview-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 110px;
+    border-radius: 10px;
+    background-color: var(--surface-2);
+    background-image:
+      linear-gradient(45deg, var(--border-subtle) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--border-subtle) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--border-subtle) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--border-subtle) 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+    padding: 12px;
+  }
+  .sig-type-preview {
+    font-family: "Caveat", cursive;
+    font-size: 44px;
+    font-weight: 700;
+    color: #111;
+    background: #fff;
+    padding: 6px 22px;
+    border-radius: 6px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .stamp-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .stamp-preset-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 10px;
+    border-radius: 10px;
+    border: 2px solid var(--border-subtle);
+    background: var(--surface-2);
+    cursor: pointer;
+    transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
+  }
+  .stamp-preset-btn:hover { background: var(--surface); border-color: var(--accent); }
+  .stamp-preset-label {
+    font-weight: 800;
+    font-size: 15px;
+    letter-spacing: 0.05em;
+    padding: 8px 16px;
+    border: 3px solid currentColor;
+    border-radius: 6px;
+    transform: rotate(-6deg);
+  }
+
   .modal-footer {
     display: flex;
     align-items: center;
@@ -970,8 +1051,22 @@
         <button class="icon-btn" id="ellipseToolBtn" title="Ellipse" type="button" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="12" rx="9" ry="7"/></svg>
         </button>
+        <button class="icon-btn" id="redactToolBtn" title="Redact (permanently covers the area — see note)" type="button" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="1" fill="currentColor"/></svg>
+        </button>
         <input type="color" id="strokeColorInput" value="#e11d48" title="Color" disabled />
         <input type="range" id="strokeWidthSlider" min="1" max="24" value="3" title="Stroke width" disabled />
+      </div>
+
+      <span class="divider"></span>
+
+      <div class="toolbar-group">
+        <button class="icon-btn" id="signatureBtn" title="Add signature" type="button" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c2-4 4 4 6 0s3-8 5-4 3 6 5 2"/><path d="M3 21h18"/></svg>
+        </button>
+        <button class="icon-btn" id="stampBtn" title="Add stamp" type="button" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="11" rx="1.5"/><path d="M9 20h6"/><path d="M12 15v5"/></svg>
+        </button>
       </div>
 
       <span class="divider"></span>
@@ -1027,6 +1122,63 @@
         <button class="btn secondary" id="cancelRefineBtn" type="button">Cancel</button>
         <button class="btn" id="applyMaskBtn" type="button">Apply changes</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Signature modal: draw or type, then drop onto the page as an image layer -->
+<div id="signatureModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Add signature" hidden>
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h3>Add signature</h3>
+      <button class="icon-btn" id="closeSignatureBtn" title="Close" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="refine-body">
+      <div class="tool-toggle">
+        <button class="toggle-btn active" id="sigDrawModeBtn" type="button">Draw</button>
+        <button class="toggle-btn" id="sigTypeModeBtn" type="button">Type</button>
+      </div>
+
+      <div id="sigDrawPane">
+        <div class="refine-canvas-wrap">
+          <canvas id="signatureDrawCanvas" width="560" height="220"></canvas>
+        </div>
+        <div class="refine-controls">
+          <button class="btn secondary" id="sigClearBtn" type="button">Clear</button>
+          <p class="refine-hint">Draw with your mouse or finger — the background stays transparent.</p>
+        </div>
+      </div>
+
+      <div id="sigTypePane" hidden>
+        <input type="text" id="sigTextInput" class="sig-text-input" placeholder="Type your name" maxlength="60" />
+        <div class="sig-type-preview-wrap">
+          <span id="sigTypePreview" class="sig-type-preview"></span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-right">
+        <button class="btn secondary" id="cancelSignatureBtn" type="button">Cancel</button>
+        <button class="btn" id="insertSignatureBtn" type="button">Insert</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Stamp modal: pick a preset label, rendered to an image layer -->
+<div id="stampModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Add stamp" hidden>
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h3>Add stamp</h3>
+      <button class="icon-btn" id="closeStampBtn" title="Close" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="refine-body">
+      <div id="stampGrid" class="stamp-grid"></div>
     </div>
   </div>
 </div>
@@ -1087,8 +1239,11 @@
   const arrowToolBtn = document.getElementById("arrowToolBtn");
   const rectToolBtn = document.getElementById("rectToolBtn");
   const ellipseToolBtn = document.getElementById("ellipseToolBtn");
+  const redactToolBtn = document.getElementById("redactToolBtn");
   const strokeColorInput = document.getElementById("strokeColorInput");
   const strokeWidthSlider = document.getElementById("strokeWidthSlider");
+  const signatureBtn = document.getElementById("signatureBtn");
+  const stampBtn = document.getElementById("stampBtn");
 
   const refineModal = document.getElementById("refineModal");
   const refineCanvas = document.getElementById("refineCanvas");
@@ -1099,6 +1254,23 @@
   const brushSizeSlider = document.getElementById("brushSizeSlider");
   const resetMaskBtn = document.getElementById("resetMaskBtn");
   const applyMaskBtn = document.getElementById("applyMaskBtn");
+
+  const signatureModal = document.getElementById("signatureModal");
+  const closeSignatureBtn = document.getElementById("closeSignatureBtn");
+  const cancelSignatureBtn = document.getElementById("cancelSignatureBtn");
+  const insertSignatureBtn = document.getElementById("insertSignatureBtn");
+  const sigDrawModeBtn = document.getElementById("sigDrawModeBtn");
+  const sigTypeModeBtn = document.getElementById("sigTypeModeBtn");
+  const sigDrawPane = document.getElementById("sigDrawPane");
+  const sigTypePane = document.getElementById("sigTypePane");
+  const signatureDrawCanvas = document.getElementById("signatureDrawCanvas");
+  const sigClearBtn = document.getElementById("sigClearBtn");
+  const sigTextInput = document.getElementById("sigTextInput");
+  const sigTypePreview = document.getElementById("sigTypePreview");
+
+  const stampModal = document.getElementById("stampModal");
+  const closeStampBtn = document.getElementById("closeStampBtn");
+  const stampGrid = document.getElementById("stampGrid");
 
   // ---- Core state --------------------------------------------------
   let pdfProxy = null;          // pdf.js document proxy for the loaded file
@@ -1407,8 +1579,8 @@
     }
     activeTool = "select";
     Object.values(toolButtons).forEach((btn) => btn.classList.remove("active"));
-    [penToolBtn, highlightToolBtn, lineToolBtn, arrowToolBtn, rectToolBtn, ellipseToolBtn,
-      strokeColorInput, strokeWidthSlider].forEach((el) => { el.disabled = true; });
+    [penToolBtn, highlightToolBtn, lineToolBtn, arrowToolBtn, rectToolBtn, ellipseToolBtn, redactToolBtn,
+      strokeColorInput, strokeWidthSlider, signatureBtn, stampBtn].forEach((el) => { el.disabled = true; });
   });
 
   // Render (or re-activate) a given 0-based page index, persisting the
@@ -1504,8 +1676,8 @@
     resetZoom();
     addTextBtn.disabled = false;
     uploadImageBtn.disabled = false;
-    [penToolBtn, highlightToolBtn, lineToolBtn, arrowToolBtn, rectToolBtn, ellipseToolBtn,
-      strokeColorInput, strokeWidthSlider].forEach((el) => { el.disabled = false; });
+    [penToolBtn, highlightToolBtn, lineToolBtn, arrowToolBtn, rectToolBtn, ellipseToolBtn, redactToolBtn,
+      strokeColorInput, strokeWidthSlider, signatureBtn, stampBtn].forEach((el) => { el.disabled = false; });
     setActiveTool("select"); // drawing tools always reset when switching pages
     updatePasteHintVisibility();
     updateSelectionButtons();
@@ -1777,6 +1949,7 @@
   toolButtons.arrow = arrowToolBtn;
   toolButtons.rect = rectToolBtn;
   toolButtons.ellipse = ellipseToolBtn;
+  toolButtons.redact = redactToolBtn;
 
   function setActiveTool(tool) {
     activeTool = activeTool === tool ? "select" : tool;
@@ -1838,7 +2011,7 @@
   }
 
   function handleShapeMouseDown(opt) {
-    const isShapeTool = activeTool === "rect" || activeTool === "ellipse" || activeTool === "line" || activeTool === "arrow";
+    const isShapeTool = activeTool === "rect" || activeTool === "ellipse" || activeTool === "line" || activeTool === "arrow" || activeTool === "redact";
     if (!isShapeTool || !fabricCanvas) return;
 
     const pointer = fabricCanvas.getPointer(opt.e);
@@ -1851,7 +2024,16 @@
       selectable: false, evented: false,
     };
 
-    if (activeTool === "rect") {
+    if (activeTool === "redact") {
+      // Solid black box — a VISUAL cover-up only. The underlying page
+      // content is not removed from the PDF, only painted over at export.
+      shapeDragObj = new fabric.Rect({
+        ...commonProps, stroke: null, strokeWidth: 0, fill: "#000000",
+        left: pointer.x, top: pointer.y, width: 1, height: 1,
+      });
+      shapeDragObj.__layerKind = "rect";
+      shapeDragObj.__isRedaction = true;
+    } else if (activeTool === "rect") {
       shapeDragObj = new fabric.Rect({ ...commonProps, left: pointer.x, top: pointer.y, width: 1, height: 1 });
       shapeDragObj.__layerKind = "rect";
     } else if (activeTool === "ellipse") {
@@ -1877,7 +2059,7 @@
     if (!shapeDragObj || !shapeDragStart || !fabricCanvas) return;
     const pointer = fabricCanvas.getPointer(opt.e);
 
-    if (activeTool === "rect") {
+    if (activeTool === "rect" || activeTool === "redact") {
       shapeDragObj.set({
         left: Math.min(shapeDragStart.x, pointer.x),
         top: Math.min(shapeDragStart.y, pointer.y),
@@ -1974,7 +2156,13 @@
         return { ...base, text: obj.text, fontSize: obj.fontSize };
       }
       if (obj.__layerKind === "rect" || obj.__layerKind === "ellipse") {
-        return { ...base, stroke: obj.stroke, strokeWidth: obj.strokeWidth };
+        return {
+          ...base,
+          stroke: obj.stroke,
+          strokeWidth: obj.strokeWidth,
+          fill: obj.fill || null,
+          isRedaction: !!obj.__isRedaction,
+        };
       }
       if (obj.__layerKind === "path") {
         return {
@@ -2023,10 +2211,11 @@
           width: data.naturalWidth, height: data.naturalHeight,
           scaleX: data.scaleX, scaleY: data.scaleY, angle: data.angle || 0,
           opacity: data.opacity ?? 1,
-          stroke: data.stroke, strokeWidth: data.strokeWidth, fill: null,
+          stroke: data.stroke, strokeWidth: data.strokeWidth, fill: data.fill ?? null,
           originX: "left", originY: "top",
         });
         rectObj.__layerKind = "rect";
+        if (data.isRedaction) rectObj.__isRedaction = true;
         fabricCanvas.add(rectObj);
         resolve(rectObj);
         return;
@@ -2257,7 +2446,16 @@
       closeRefineModal();
       return;
     }
-    if (!refineModal.hidden) return; // don't leak shortcuts into the canvas while the modal is open
+    if (e.key === "Escape" && !signatureModal.hidden) {
+      closeSignatureModal();
+      return;
+    }
+    if (e.key === "Escape" && !stampModal.hidden) {
+      closeStampModal();
+      return;
+    }
+    // don't leak shortcuts into the canvas while any modal is open
+    if (!refineModal.hidden || !signatureModal.hidden || !stampModal.hidden) return;
 
     if (e.key === "Escape" && activeTool !== "select") {
       setActiveTool("select");
@@ -2335,7 +2533,7 @@
 
   document.addEventListener("paste", async (event) => {
     if (!fabricCanvas) return; // no PDF loaded yet, nothing to paste onto
-    if (!refineModal.hidden) return; // don't interfere with the refine modal
+    if (!refineModal.hidden || !signatureModal.hidden || !stampModal.hidden) return; // don't interfere with an open modal
 
     const items = event.clipboardData?.items;
     if (!items) return;
@@ -2401,6 +2599,38 @@
         updateSelectionButtons();
         resolve(img);
         // object:added fires -> pushHistorySnapshot / paste-hint / save-button handled centrally
+      });
+    });
+  }
+
+  // Same on-canvas placement logic as addPastedImageLayer, but for a PNG
+  // that's already exactly what it should look like (a drawn/typed
+  // signature, a stamp) — there's no AI background removal step, so the
+  // one blob just plays the role of blob/originalBlob/aiBlob all at once.
+  function addRawImageLayer(blob, { maxDimRatio = 0.4 } = {}) {
+    const pageState = pageCache.get(currentPageIndex);
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(blob);
+      fabric.Image.fromURL(url, (img) => {
+        const maxDim = Math.min(pageState.canvasWidth, pageState.canvasHeight) * maxDimRatio;
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const cascade = (fabricCanvas.getObjects().length % 8) * 22;
+
+        img.set({
+          ...IMAGE_STYLE,
+          left: (pageState.canvasWidth - img.width * scale) / 2 + cascade,
+          top: (pageState.canvasHeight - img.height * scale) / 2 + cascade,
+          scaleX: scale,
+          scaleY: scale,
+        });
+        img.__layerKind = "image";
+        img.__layerData = { blob, originalBlob: blob, aiBlob: blob };
+
+        fabricCanvas.add(img);
+        fabricCanvas.setActiveObject(img);
+        fabricCanvas.renderAll();
+        updateSelectionButtons();
+        resolve(img);
       });
     });
   }
@@ -2540,6 +2770,203 @@
       });
     }, "image/png");
   }
+
+  // ---------------------------------------------------------------------
+  // Signature — draw freehand or type in a cursive font, rasterize to a
+  // transparent PNG, and insert it the same way as any pasted image.
+  // ---------------------------------------------------------------------
+  let sigCtx = null;
+  let sigDrawing = false;
+  let sigLastPoint = null;
+  let sigHasDrawn = false;
+  let sigMode = "draw";
+
+  function setSignatureMode(mode) {
+    sigMode = mode;
+    sigDrawModeBtn.classList.toggle("active", mode === "draw");
+    sigTypeModeBtn.classList.toggle("active", mode === "type");
+    sigDrawPane.hidden = mode !== "draw";
+    sigTypePane.hidden = mode !== "type";
+  }
+  sigDrawModeBtn.addEventListener("click", () => setSignatureMode("draw"));
+  sigTypeModeBtn.addEventListener("click", () => setSignatureMode("type"));
+
+  function clearSignatureCanvas() {
+    if (!sigCtx) return;
+    sigCtx.clearRect(0, 0, signatureDrawCanvas.width, signatureDrawCanvas.height);
+    sigHasDrawn = false;
+  }
+  sigClearBtn.addEventListener("click", clearSignatureCanvas);
+
+  function getSigCanvasPoint(evt) {
+    const rect = signatureDrawCanvas.getBoundingClientRect();
+    const scaleX = signatureDrawCanvas.width / rect.width;
+    const scaleY = signatureDrawCanvas.height / rect.height;
+    return { x: (evt.clientX - rect.left) * scaleX, y: (evt.clientY - rect.top) * scaleY };
+  }
+  function sigStrokeSegment(from, to) {
+    sigCtx.strokeStyle = "#111111";
+    sigCtx.lineWidth = 3;
+    sigCtx.lineCap = "round";
+    sigCtx.lineJoin = "round";
+    sigCtx.beginPath();
+    sigCtx.moveTo(from.x, from.y);
+    sigCtx.lineTo(to.x, to.y);
+    sigCtx.stroke();
+    sigHasDrawn = true;
+  }
+  signatureDrawCanvas.addEventListener("pointerdown", (e) => {
+    if (!sigCtx) return;
+    sigDrawing = true;
+    signatureDrawCanvas.setPointerCapture(e.pointerId);
+    sigLastPoint = getSigCanvasPoint(e);
+    sigStrokeSegment(sigLastPoint, sigLastPoint); // dot for a single click
+  });
+  signatureDrawCanvas.addEventListener("pointermove", (e) => {
+    if (!sigDrawing || !sigCtx) return;
+    const point = getSigCanvasPoint(e);
+    sigStrokeSegment(sigLastPoint, point);
+    sigLastPoint = point;
+  });
+  ["pointerup", "pointerleave", "pointercancel"].forEach((evt) =>
+    signatureDrawCanvas.addEventListener(evt, () => { sigDrawing = false; })
+  );
+
+  sigTextInput.addEventListener("input", () => {
+    sigTypePreview.textContent = sigTextInput.value.trim() || "Your signature";
+  });
+
+  function openSignatureModal() {
+    if (!fabricCanvas) return;
+    sigCtx = signatureDrawCanvas.getContext("2d");
+    clearSignatureCanvas();
+    sigTextInput.value = "";
+    sigTypePreview.textContent = "Your signature";
+    setSignatureMode("draw");
+    signatureModal.hidden = false;
+  }
+  function closeSignatureModal() {
+    signatureModal.hidden = true;
+    sigCtx = null;
+  }
+  signatureBtn.addEventListener("click", openSignatureModal);
+  closeSignatureBtn.addEventListener("click", closeSignatureModal);
+  cancelSignatureBtn.addEventListener("click", closeSignatureModal);
+
+  async function rasterizeTypedSignature(text) {
+    // Ensure the cursive webfont is actually loaded before drawing text to
+    // an offscreen canvas — canvas text ignores @font-face loads still in
+    // flight and silently falls back, which would bake the wrong font in.
+    const fontSpec = '700 64px "Caveat", cursive';
+    try {
+      await document.fonts.load(fontSpec);
+      await document.fonts.ready;
+    } catch (_) { /* best effort — draw with whatever is available */ }
+
+    const measure = document.createElement("canvas").getContext("2d");
+    measure.font = fontSpec;
+    const textWidth = Math.max(10, measure.measureText(text).width);
+
+    const padX = 24, padY = 24;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.ceil(textWidth + padX * 2);
+    canvas.height = Math.ceil(64 * 1.5 + padY * 2 * 0.5);
+    const ctx = canvas.getContext("2d");
+    ctx.font = fontSpec;
+    ctx.fillStyle = "#111111";
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "left";
+    ctx.fillText(text, padX, canvas.height / 2);
+
+    return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+  }
+
+  insertSignatureBtn.addEventListener("click", async () => {
+    if (!fabricCanvas) return;
+    if (sigMode === "draw") {
+      if (!sigHasDrawn) return;
+      signatureDrawCanvas.toBlob(async (blob) => {
+        if (!blob) return;
+        await addRawImageLayer(blob, { maxDimRatio: 0.35 });
+        closeSignatureModal();
+      }, "image/png");
+    } else {
+      const text = sigTextInput.value.trim();
+      if (!text) return;
+      const blob = await rasterizeTypedSignature(text);
+      if (!blob) return;
+      await addRawImageLayer(blob, { maxDimRatio: 0.3 });
+      closeSignatureModal();
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // Stamps — preset labels rendered to a flat PNG (border + bold text),
+  // inserted the same way as a signature. Kept un-rotated in the exported
+  // image itself; the tilt in the picker button is a CSS-only preview.
+  // ---------------------------------------------------------------------
+  const STAMP_PRESETS = [
+    { label: "APPROVED", color: "#1b8a5a" },
+    { label: "REJECTED", color: "#c62828" },
+    { label: "DRAFT", color: "#616161" },
+    { label: "CONFIDENTIAL", color: "#6a1b9a" },
+    { label: "PAID", color: "#1565c0" },
+    { label: "URGENT", color: "#e65100" },
+  ];
+
+  function renderStampToBlob(label, color) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 420;
+    canvas.height = 150;
+    const ctx = canvas.getContext("2d");
+    const borderWidth = 8;
+    const inset = borderWidth / 2 + 4;
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = borderWidth;
+    ctx.strokeRect(inset, inset, canvas.width - inset * 2, canvas.height - inset * 2);
+
+    ctx.fillStyle = color;
+    ctx.font = "800 52px Inter, Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, canvas.width / 2, canvas.height / 2, canvas.width - inset * 2 - 24);
+
+    return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+  }
+
+  function renderStampGrid() {
+    stampGrid.innerHTML = "";
+    STAMP_PRESETS.forEach((preset) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "stamp-preset-btn";
+      const span = document.createElement("span");
+      span.className = "stamp-preset-label";
+      span.textContent = preset.label;
+      span.style.color = preset.color;
+      btn.appendChild(span);
+      btn.addEventListener("click", async () => {
+        if (!fabricCanvas) return;
+        const blob = await renderStampToBlob(preset.label, preset.color);
+        if (!blob) return;
+        await addRawImageLayer(blob, { maxDimRatio: 0.3 });
+        closeStampModal();
+      });
+      stampGrid.appendChild(btn);
+    });
+  }
+  renderStampGrid();
+
+  function openStampModal() {
+    if (!fabricCanvas) return;
+    stampModal.hidden = false;
+  }
+  function closeStampModal() {
+    stampModal.hidden = true;
+  }
+  stampBtn.addEventListener("click", openStampModal);
+  closeStampBtn.addEventListener("click", closeStampModal);
 
   // ---------------------------------------------------------------------
   // 6. Save & Export — embed every edited page's image/text layers
@@ -2685,7 +3112,7 @@
     const offsetY = halfW * Math.sin(angleRad) + halfH * Math.cos(angleRad);
 
     const { color, alpha } = parseStrokeColor(layer.stroke);
-    page.drawRectangle({
+    const rectOpts = {
       x: centerPdfX - offsetX,
       y: centerPdfY - offsetY,
       width: pdfWidth,
@@ -2694,7 +3121,17 @@
       borderColor: color,
       borderWidth: (layer.strokeWidth || 1) * scaleX,
       borderOpacity: alpha !== null ? alpha : (layer.opacity ?? 1),
-    });
+    };
+    // Redaction boxes carry a solid fill (default black) and no stroke —
+    // this is a VISUAL cover-up baked into the page at export time, it
+    // does not remove the underlying content from the PDF's text layer.
+    if (layer.fill) {
+      const filled = parseStrokeColor(layer.fill);
+      rectOpts.color = filled.color;
+      rectOpts.opacity = filled.alpha !== null ? filled.alpha : (layer.opacity ?? 1);
+      rectOpts.borderWidth = 0;
+    }
+    page.drawRectangle(rectOpts);
   }
 
   function embedEllipseLayer(page, layer, canvasWidth, canvasHeight, centerCanvas) {
