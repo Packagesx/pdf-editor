@@ -769,16 +769,18 @@
       const imageBytes = await overlayImageBlob.arrayBuffer();
       const pngImage = await pdfDoc.embedPng(imageBytes);
 
-      // Final on-canvas bounding box of the dragged/resized image, in its
-      // own *unrotated* local frame (top-left origin, y increases downward
-      // — same as the canvas). Fabric keeps left/top/width/height relative
-      // to this unrotated frame and rotates the object around its center
-      // separately, so these numbers stay valid at any rotation angle.
-      const canvasX = overlayImage.left;
-      const canvasY = overlayImage.top;
+      // Unrotated local size of the image (unaffected by rotation angle).
       const canvasWidth = overlayImage.width * overlayImage.scaleX;
       const canvasHeight = overlayImage.height * overlayImage.scaleY;
       const fabricAngle = overlayImage.angle || 0; // degrees, clockwise (Fabric convention)
+
+      // IMPORTANT: overlayImage.left/top only equal the pre-rotation corner
+      // position when angle is 0. Because this image's rotation origin is a
+      // corner (originX/Y: "left"/"top") rather than the center, Fabric
+      // recomputes left/top as that corner sweeps around during rotation —
+      // they do NOT stay put. getCenterPoint() is the one property Fabric
+      // keeps accurate at any angle, so anchor everything on that instead.
+      const center = overlayImage.getCenterPoint();
 
       // Scale factors: canvas pixels -> PDF points.
       const scaleX = pageWidth / fabricCanvas.width;
@@ -794,13 +796,8 @@
       // sign of the angle is negated when carrying it over.
       const pdfAngleDeg = (360 - (fabricAngle % 360)) % 360;
 
-      // The center of the image doesn't move when Fabric rotates it (Fabric
-      // rotates around the object's center by default), so anchor the PDF
-      // placement on that same center point rather than the top-left corner.
-      const centerCanvasX = canvasX + canvasWidth / 2;
-      const centerCanvasY = canvasY + canvasHeight / 2;
-      const centerPdfX = centerCanvasX * scaleX;
-      const centerPdfY = pageHeight - centerCanvasY * scaleY;
+      const centerPdfX = center.x * scaleX;
+      const centerPdfY = pageHeight - center.y * scaleY;
 
       // pdf-lib rotates an image around its (x, y) anchor — the position of
       // the bottom-left corner *before* rotation — not around the center.
