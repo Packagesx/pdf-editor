@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cutout · PDF Background Remover</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2349de78'/%3E%3Cpath d='M20 14h16l10 10v26a2 2 0 0 1-2 2H20a2 2 0 0 1-2-2V16a2 2 0 0 1 2-2z' fill='%23041107'/%3E%3Cpath d='M36 14v8a2 2 0 0 0 2 2h8z' fill='%2349de78'/%3E%3Crect x='22' y='38' width='16' height='12' rx='2' fill='none' stroke='%2349de78' stroke-width='2' stroke-dasharray='3 3'/%3E%3C/svg%3E" />
+
+<!--
+  100% client-side version. Everything (PDF render, AI background removal,
+  and PDF export) runs in the browser tab — nothing is uploaded anywhere.
+
+  Libraries:
+    - PDF.js                     renders the uploaded PDF page onto a canvas
+    - Fabric.js                  drag / resize the pasted image on the canvas
+    - @imgly/background-removal  in-browser AI background removal (WASM/ONNX)
+    - pdf-lib                    embeds the final image into the PDF and exports it
+
+  No Python, no server, no deployment. Open this file through any static
+  web server (module scripts are blocked on file://) — see the chat message
+  for the one-line command, or drop it on Netlify Drop for a permanent URL.
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+
+<style>
+  :root {
+    /* Core palette — deep cool-neutral ink with a chroma-key green accent
+       (a nod to background removal / green-screen matting). All contrast
+       pairs below are verified >= 4.5:1 for text, >= 3:1 for UI borders. */
+    --bg: oklch(16% 0.015 250);
+    --surface: oklch(21% 0.015 250);
+    --surface-2: oklch(25% 0.02 250);
+    --border-subtle: oklch(32% 0.02 250);
+    --border: oklch(50% 0.025 250);
+    --ink: oklch(94% 0.01 250);
+    --muted: oklch(72% 0.02 250);
+
+    --accent: oklch(80% 0.19 150);
+    --accent-hover: oklch(75% 0.19 150);
+    --accent-active: oklch(70% 0.19 150);
+    --accent-ink: oklch(16% 0.03 150);
+    --accent-wash: oklch(80% 0.19 150 / 12%);
+    --accent-wash-strong: oklch(80% 0.19 150 / 22%);
+
+    --danger: oklch(65% 0.19 25);
+    --danger-wash: oklch(65% 0.19 25 / 14%);
+
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    --z-canvas: 1;
+    --z-hint: 10;
+    --z-dragover: 20;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { color-scheme: dark; }
+
+  body {
+    margin: 0;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection { background: var(--accent-wash-strong); color: var(--ink); }
+
+  button, input, a { font-family: inherit; }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Top bar                                                           */
+  /* ---------------------------------------------------------------- */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 12px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-right: auto;
+  }
+
+  .brand-mark {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    background: var(--accent);
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+  }
+
+  .brand-mark svg { width: 17px; height: 17px; }
+
+  .brand-name {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .brand-name .dim {
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .status-pill {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--muted);
+    background: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    white-space: nowrap;
+  }
+  .status-pill.visible { display: inline-flex; }
+  .status-pill[data-state="success"] { color: var(--accent); background: var(--accent-wash); border-color: transparent; }
+  .status-pill[data-state="error"] { color: var(--danger); background: var(--danger-wash); border-color: transparent; }
+
+  .status-pill .progress-track {
+    width: 60px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border-subtle);
+    overflow: hidden;
+  }
+  .status-pill .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+    border-radius: inherit;
+    transition: width 0.25s var(--ease);
+  }
+
+  .spinner {
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    border: 2px solid var(--border-subtle);
+    border-top-color: var(--accent);
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .spinner { animation: pulse-opacity 1.2s ease-in-out infinite; }
+  }
+  @keyframes pulse-opacity { 50% { opacity: 0.35; } }
+
+  .icon-check { color: var(--accent); }
+  .icon-alert { color: var(--danger); }
+
+  /* ---------------------------------------------------------------- */
+  /* Buttons                                                           */
+  /* ---------------------------------------------------------------- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    border: none;
+    padding: 9px 16px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s var(--ease), transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
+  }
+  .btn svg { width: 15px; height: 15px; }
+  .btn:hover:not(:disabled) { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 4px 14px oklch(80% 0.19 150 / 25%); }
+  .btn:active:not(:disabled) { background: var(--accent-active); transform: translateY(0); box-shadow: none; }
+  .btn:disabled { background: var(--surface-2); color: var(--muted); cursor: not-allowed; }
+  @media (prefers-reduced-motion: reduce) {
+    .btn:hover:not(:disabled) { transform: none; }
+  }
+
+  .btn.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--ink);
+  }
+  .btn.secondary:hover:not(:disabled) { background: var(--surface-2); box-shadow: none; transform: none; }
+
+  input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+  /* ---------------------------------------------------------------- */
+  /* Layout                                                            */
+  /* ---------------------------------------------------------------- */
+  main {
+    display: flex;
+    justify-content: center;
+    padding: 40px 20px 64px;
+    min-height: calc(100vh - 57px);
+  }
+
+  /* Dropzone / empty state ------------------------------------------ */
+  .dropzone {
+    width: 100%;
+    max-width: 620px;
+    margin-top: 6vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 56px 40px;
+    border: 1.5px dashed var(--border);
+    border-radius: 16px;
+    background: var(--surface);
+    transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
+  }
+  .dropzone.dragover {
+    border-color: var(--accent);
+    background: var(--accent-wash);
+  }
+
+  .dropzone-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    background: var(--surface-2);
+    display: grid;
+    place-items: center;
+    margin-bottom: 20px;
+    color: var(--muted);
+    transition: color 0.2s var(--ease), background 0.2s var(--ease);
+  }
+  .dropzone-icon svg { width: 26px; height: 26px; }
+  .dropzone.dragover .dropzone-icon { color: var(--accent); background: var(--accent-wash-strong); }
+
+  .dropzone h2 {
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0 0 8px;
+  }
+
+  .dropzone p {
+    font-size: 14px;
+    color: var(--muted);
+    margin: 0 0 26px;
+    line-height: 1.55;
+    max-width: 42ch;
+  }
+
+  .steps {
+    display: flex;
+    gap: 28px;
+    margin-top: 40px;
+    padding-top: 32px;
+    border-top: 1px solid var(--border-subtle);
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    max-width: 150px;
+  }
+
+  .step-num {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+  }
+
+  .step-label {
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  .privacy-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 22px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .privacy-note svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+  /* Editor area ------------------------------------------------------- */
+  .editor-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    width: 100%;
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  .editor-area.visible {
+    animation: rise-in 0.45s var(--ease) forwards;
+  }
+  @keyframes rise-in {
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .editor-area.visible { animation: fade-in 0.2s linear forwards; }
+    @keyframes fade-in { to { opacity: 1; } }
+  }
+
+  .canvas-shell {
+    position: relative;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 1px 0 var(--border-subtle), 0 20px 48px rgba(0, 0, 0, 0.45);
+    max-width: 100%;
+    line-height: 0;
+  }
+
+  #canvasWrap { line-height: 0; max-width: 100%; }
+  #fabricCanvas { display: block; max-width: 100%; height: auto; }
+
+  /* Floating "paste here" hint, shown until the first image lands */
+  .paste-hint {
+    position: absolute;
+    inset: 0;
+    z-index: var(--z-hint);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    background: linear-gradient(oklch(16% 0.015 250 / 55%), oklch(16% 0.015 250 / 55%));
+    opacity: 0;
+    transition: opacity 0.3s var(--ease);
+  }
+  .paste-hint.visible { opacity: 1; }
+
+  .paste-hint-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 22px 30px;
+    border-radius: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border-subtle);
+    animation: breathe 2.4s var(--ease) infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .paste-hint-badge { animation: none; }
+  }
+  @keyframes breathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.035); }
+  }
+
+  .paste-hint-badge svg { width: 24px; height: 24px; color: var(--accent); }
+  .paste-hint-badge .kbd-row { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); font-weight: 600; }
+  .paste-hint-badge kbd {
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 3px 7px;
+    border-radius: 5px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    color: var(--ink);
+  }
+  .paste-hint-badge .sub { font-size: 12px; color: var(--muted); }
+
+  .canvas-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+  .canvas-toolbar .divider { width: 1px; height: 14px; background: var(--border-subtle); }
+  .canvas-toolbar .file-name { color: var(--ink); font-weight: 600; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .link-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color 0.15s var(--ease);
+  }
+  .link-btn:hover { color: var(--ink); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" fill="#041107"/><rect x="8" y="14" width="7" height="5" rx="1" stroke="#49de78" stroke-width="1.4" stroke-dasharray="2 2" fill="none"/></svg>
+    </span>
+    <span class="brand-name">Cutout <span class="dim">· PDF background remover</span></span>
+  </div>
+
+  <span id="statusPill" class="status-pill"></span>
+
+  <label class="btn secondary" for="pdfInput">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M7 9l5-5 5 5"/><path d="M12 4v12"/></svg>
+    Upload PDF
+  </label>
+  <input type="file" id="pdfInput" accept="application/pdf" />
+
+  <button class="btn" id="saveBtn" disabled>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+    Save &amp; Export
+  </button>
+</header>
+
+<main>
+  <!-- Empty state: drag-and-drop zone -->
+  <div id="dropzone" class="dropzone">
+    <div class="dropzone-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M15 3v5h5"/></svg>
+    </div>
+    <h2>Drop a PDF, or choose one</h2>
+    <p>Paste an image anywhere on the page afterward — its background is cut out automatically and dropped onto the document.</p>
+    <label class="btn" for="pdfInput">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M7 9l5-5 5 5"/><path d="M12 4v12"/></svg>
+      Choose PDF
+    </label>
+
+    <div class="steps">
+      <div class="step">
+        <span class="step-num">1</span>
+        <span class="step-label">Upload a PDF to edit</span>
+      </div>
+      <div class="step">
+        <span class="step-num">2</span>
+        <span class="step-label">Paste an image — background removed automatically</span>
+      </div>
+      <div class="step">
+        <span class="step-num">3</span>
+        <span class="step-label">Drag it into place, then export</span>
+      </div>
+    </div>
+
+    <span class="privacy-note">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+      Runs entirely in your browser — files never leave this device
+    </span>
+  </div>
+
+  <!-- Editor: PDF canvas + Fabric.js overlay -->
+  <div id="editorArea" class="editor-area">
+    <div class="canvas-shell">
+      <div id="canvasWrap">
+        <canvas id="fabricCanvas"></canvas>
+      </div>
+      <div id="pasteHint" class="paste-hint">
+        <div class="paste-hint-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+          <span class="kbd-row"><kbd>Ctrl</kbd>+<kbd>V</kbd> to paste an image</span>
+          <span class="sub">Its background is removed automatically</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="canvas-toolbar">
+      <span class="file-name" id="fileNameLabel"></span>
+      <span class="divider"></span>
+      <button class="link-btn" id="startOverBtn" type="button">Start over</button>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+  // ---------------------------------------------------------------------
+  // Client-side-only library imports (no build step / bundler required).
+  // esm.sh serves npm packages as browser-ready ES modules.
+  // ---------------------------------------------------------------------
+  import { removeBackground as imglyRemoveBackground } from "https://esm.sh/@imgly/background-removal@1.5.8";
+  import { PDFDocument, degrees } from "https://esm.sh/pdf-lib@1.17.1";
+
+  // ---------------------------------------------------------------------
+  // Setup
+  // ---------------------------------------------------------------------
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+  const pdfInput = document.getElementById("pdfInput");
+  const saveBtn = document.getElementById("saveBtn");
+  const statusPill = document.getElementById("statusPill");
+  const dropzone = document.getElementById("dropzone");
+  const editorArea = document.getElementById("editorArea");
+  const pasteHint = document.getElementById("pasteHint");
+  const fileNameLabel = document.getElementById("fileNameLabel");
+  const startOverBtn = document.getElementById("startOverBtn");
+
+  let fabricCanvas = null;      // Fabric.js canvas instance
+  let currentPdfFile = null;    // original File object, re-read on save
+  let currentPageNumber = 0;    // 0-based page index (first page only, per spec)
+  let overlayImage = null;      // fabric.Image object currently on the canvas
+  let overlayImageBlob = null;  // the transparent PNG blob backing overlayImage
+
+  const ICONS = {
+    loading: '<span class="spinner"></span>',
+    success: '<svg class="icon-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+    error: '<svg class="icon-alert" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v5"/><path d="M12 16h.01"/></svg>',
+  };
+
+  // type: 'loading' | 'success' | 'error' | 'idle'
+  function setStatus(text, type = "idle", progressPct = null) {
+    statusPill.classList.toggle("visible", type !== "idle" && !!text);
+    statusPill.dataset.state = type;
+    const icon = ICONS[type] || "";
+    const bar = progressPct !== null
+      ? `<span class="progress-track"><span class="progress-fill" style="width:${progressPct}%"></span></span>`
+      : "";
+    statusPill.innerHTML = `${icon}<span>${text}</span>${bar}`;
+  }
+
+  // ---------------------------------------------------------------------
+  // 1. PDF upload & render (first page) via PDF.js
+  // ---------------------------------------------------------------------
+  async function loadPdfFile(file) {
+    if (!file || file.type !== "application/pdf") {
+      alert("Please choose a PDF file.");
+      return;
+    }
+
+    currentPdfFile = file;
+    setStatus("Loading PDF…", "loading");
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const page = await pdf.getPage(1); // first page only, per spec
+      currentPageNumber = 0;
+
+      // Fit the page to a reasonable on-screen width while keeping it sharp.
+      const targetWidth = 900;
+      const baseViewport = page.getViewport({ scale: 1 });
+      const scale = targetWidth / baseViewport.width;
+      const viewport = page.getViewport({ scale });
+
+      // Render into a throwaway canvas so we can hand Fabric a plain image.
+      const renderCanvas = document.createElement("canvas");
+      renderCanvas.width = viewport.width;
+      renderCanvas.height = viewport.height;
+      const ctx = renderCanvas.getContext("2d");
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      const pageDataUrl = renderCanvas.toDataURL("image/png");
+
+      initFabricCanvas(viewport.width, viewport.height, pageDataUrl);
+
+      dropzone.style.display = "none";
+      editorArea.classList.add("visible");
+      pasteHint.classList.add("visible");
+      fileNameLabel.textContent = file.name;
+      setStatus("PDF loaded", "success");
+      window.setTimeout(() => setStatus("", "idle"), 1800);
+    } catch (err) {
+      console.error(err);
+      setStatus("Failed to load PDF", "error");
+      alert("Could not load that PDF: " + err.message);
+    }
+  }
+
+  pdfInput.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) loadPdfFile(file);
+  });
+
+  // Drag & drop straight onto the dropzone.
+  ["dragenter", "dragover"].forEach((evt) =>
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropzone.classList.add("dragover");
+    })
+  );
+  ["dragleave", "drop"].forEach((evt) =>
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("dragover");
+    })
+  );
+  dropzone.addEventListener("drop", (e) => {
+    const file = e.dataTransfer?.files?.[0];
+    if (file) loadPdfFile(file);
+  });
+
+  startOverBtn.addEventListener("click", () => {
+    editorArea.classList.remove("visible");
+    dropzone.style.display = "flex";
+    pdfInput.value = "";
+    currentPdfFile = null;
+    overlayImage = null;
+    overlayImageBlob = null;
+    saveBtn.disabled = true;
+    setStatus("", "idle");
+    if (fabricCanvas) {
+      fabricCanvas.dispose();
+      fabricCanvas = null;
+    }
+  });
+
+  function initFabricCanvas(width, height, backgroundDataUrl) {
+    if (fabricCanvas) {
+      fabricCanvas.dispose();
+    }
+    overlayImage = null;
+    overlayImageBlob = null;
+    saveBtn.disabled = true;
+    pasteHint.classList.add("visible");
+
+    const canvasEl = document.getElementById("fabricCanvas");
+    canvasEl.width = width;
+    canvasEl.height = height;
+
+    fabricCanvas = new fabric.Canvas("fabricCanvas", {
+      width,
+      height,
+      selection: false,
+    });
+
+    fabric.Image.fromURL(backgroundDataUrl, (img) => {
+      fabricCanvas.setBackgroundImage(img, fabricCanvas.renderAll.bind(fabricCanvas), {
+        scaleX: width / img.width,
+        scaleY: height / img.height,
+      });
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // 2 & 3. Intercept paste, remove the background entirely in-browser
+  // ---------------------------------------------------------------------
+  document.addEventListener("paste", async (event) => {
+    if (!fabricCanvas) {
+      return; // no PDF loaded yet, nothing to paste onto
+    }
+
+    const items = event.clipboardData?.items;
+    if (!items) return;
+
+    let imageFile = null;
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        imageFile = item.getAsFile();
+        break;
+      }
+    }
+    if (!imageFile) return; // pasted content wasn't an image
+
+    event.preventDefault();
+    saveBtn.disabled = true;
+    setStatus("Removing background…", "loading");
+
+    try {
+      // Runs fully in the browser via WASM/ONNX Runtime Web. On the very
+      // first call it fetches the (cached) AI model from IMG.LY's CDN.
+      const transparentBlob = await imglyRemoveBackground(imageFile, {
+        model: "isnet_quint8", // smallest/fastest quality tier (~40MB)
+        progress: (key, current, total) => {
+          const pct = total ? Math.round((current / total) * 100) : 0;
+          setStatus(`Downloading model…`, "loading", pct);
+        },
+      });
+
+      addImageToCanvas(transparentBlob);
+      setStatus("Background removed", "success");
+      window.setTimeout(() => setStatus("", "idle"), 1800);
+    } catch (err) {
+      console.error(err);
+      setStatus("Background removal failed", "error");
+      alert("Background removal failed: " + err.message);
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // 5. Canvas overlay — drop the transparent PNG onto the Fabric canvas
+  // ---------------------------------------------------------------------
+  function addImageToCanvas(blob) {
+    const objectUrl = URL.createObjectURL(blob);
+
+    fabric.Image.fromURL(objectUrl, (img) => {
+      // Remove any previously pasted image (single active overlay).
+      if (overlayImage) {
+        fabricCanvas.remove(overlayImage);
+      }
+
+      // Scale the pasted image down to fit comfortably within the page if needed.
+      const maxDim = Math.min(fabricCanvas.width, fabricCanvas.height) * 0.5;
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+
+      img.set({
+        left: (fabricCanvas.width - img.width * scale) / 2,
+        top: (fabricCanvas.height - img.height * scale) / 2,
+        scaleX: scale,
+        scaleY: scale,
+        originX: "left",
+        originY: "top",
+        cornerColor: "#49de78",
+        cornerStrokeColor: "#041107",
+        cornerStyle: "circle",
+        transparentCorners: false,
+        borderColor: "#49de78",
+      });
+
+      fabricCanvas.add(img);
+      fabricCanvas.setActiveObject(img);
+      fabricCanvas.renderAll();
+
+      overlayImage = img;
+      overlayImageBlob = blob;
+      saveBtn.disabled = false;
+
+      // First successful paste — the hint has done its job.
+      pasteHint.classList.remove("visible");
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // 6. Save & Export — embed the image into the PDF with pdf-lib, in-browser
+  // ---------------------------------------------------------------------
+  saveBtn.addEventListener("click", async () => {
+    if (!currentPdfFile || !overlayImage || !overlayImageBlob) {
+      alert("Upload a PDF and paste an image first.");
+      return;
+    }
+
+    setStatus("Saving PDF…", "loading");
+    saveBtn.disabled = true;
+
+    try {
+      const pdfBytes = await currentPdfFile.arrayBuffer();
+      const pdfDoc = await PDFDocument.load(pdfBytes);
+      const page = pdfDoc.getPages()[currentPageNumber];
+      const { width: pageWidth, height: pageHeight } = page.getSize();
+
+      const imageBytes = await overlayImageBlob.arrayBuffer();
+      const pngImage = await pdfDoc.embedPng(imageBytes);
+
+      // Final on-canvas bounding box of the dragged/resized image, in its
+      // own *unrotated* local frame (top-left origin, y increases downward
+      // — same as the canvas). Fabric keeps left/top/width/height relative
+      // to this unrotated frame and rotates the object around its center
+      // separately, so these numbers stay valid at any rotation angle.
+      const canvasX = overlayImage.left;
+      const canvasY = overlayImage.top;
+      const canvasWidth = overlayImage.width * overlayImage.scaleX;
+      const canvasHeight = overlayImage.height * overlayImage.scaleY;
+      const fabricAngle = overlayImage.angle || 0; // degrees, clockwise (Fabric convention)
+
+      // Scale factors: canvas pixels -> PDF points.
+      const scaleX = pageWidth / fabricCanvas.width;
+      const scaleY = pageHeight / fabricCanvas.height;
+
+      const pdfWidth = canvasWidth * scaleX;
+      const pdfHeight = canvasHeight * scaleY;
+
+      // pdf-lib (like raw PDF coordinates) uses a BOTTOM-left origin, unlike
+      // the canvas's top-left origin, so the y-axis has to be flipped.
+      // Rotation direction flips too: a clockwise angle on the (y-down)
+      // canvas is a counter-clockwise angle in PDF's (y-up) space, so the
+      // sign of the angle is negated when carrying it over.
+      const pdfAngleDeg = (360 - (fabricAngle % 360)) % 360;
+
+      // The center of the image doesn't move when Fabric rotates it (Fabric
+      // rotates around the object's center by default), so anchor the PDF
+      // placement on that same center point rather than the top-left corner.
+      const centerCanvasX = canvasX + canvasWidth / 2;
+      const centerCanvasY = canvasY + canvasHeight / 2;
+      const centerPdfX = centerCanvasX * scaleX;
+      const centerPdfY = pageHeight - centerCanvasY * scaleY;
+
+      // pdf-lib rotates an image around its (x, y) anchor — the position of
+      // the bottom-left corner *before* rotation — not around the center.
+      // Work backwards from the known center to find that anchor point.
+      const angleRad = (pdfAngleDeg * Math.PI) / 180;
+      const halfW = pdfWidth / 2;
+      const halfH = pdfHeight / 2;
+      const offsetX = halfW * Math.cos(angleRad) - halfH * Math.sin(angleRad);
+      const offsetY = halfW * Math.sin(angleRad) + halfH * Math.cos(angleRad);
+      const pdfX = centerPdfX - offsetX;
+      const pdfY = centerPdfY - offsetY;
+
+      page.drawImage(pngImage, {
+        x: pdfX,
+        y: pdfY,
+        width: pdfWidth,
+        height: pdfHeight,
+        rotate: degrees(pdfAngleDeg),
+      });
+
+      const outBytes = await pdfDoc.save();
+      const pdfBlob = new Blob([outBytes], { type: "application/pdf" });
+      const downloadUrl = URL.createObjectURL(pdfBlob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = "edited.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(downloadUrl);
+
+      setStatus("Saved — download started", "success");
+      window.setTimeout(() => setStatus("", "idle"), 2200);
+    } catch (err) {
+      console.error(err);
+      setStatus("Save failed", "error");
+      alert("Failed to save PDF: " + err.message);
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
