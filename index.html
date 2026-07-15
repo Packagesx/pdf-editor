@@ -411,7 +411,7 @@
     pointer-events: none;
   }
 
-  #canvasWrap { line-height: 0; }
+  #canvasWrap { position: relative; line-height: 0; }
   #fabricCanvas { display: block; }
 
   /* Floating "paste here" hint, shown while the current page has no layers */
@@ -746,12 +746,12 @@
     <div class="canvas-shell" id="canvasShell">
       <div id="canvasWrap">
         <canvas id="fabricCanvas"></canvas>
-      </div>
-      <div id="pasteHint" class="paste-hint">
-        <div class="paste-hint-badge">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
-          <span class="kbd-row"><kbd>Ctrl</kbd>+<kbd>V</kbd> to paste, or drop an image here</span>
-          <span class="sub">Its background is removed automatically</span>
+        <div id="pasteHint" class="paste-hint">
+          <div class="paste-hint-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+            <span class="kbd-row"><kbd>Ctrl</kbd>+<kbd>V</kbd> to paste, or drop an image here</span>
+            <span class="sub">Its background is removed automatically</span>
+          </div>
         </div>
       </div>
     </div>
