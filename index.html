@@ -373,10 +373,6 @@
 
   /* Editor area ------------------------------------------------------- */
   .editor-area {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 14px;
     width: 100%;
     opacity: 0;
     transform: translateY(10px);
@@ -391,6 +387,104 @@
     .editor-area.visible { animation: fade-in 0.2s linear forwards; }
     @keyframes fade-in { to { opacity: 1; } }
   }
+
+  .editor-body {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 16px;
+    width: 100%;
+  }
+
+  .editor-main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+  }
+
+  /* Page sidebar --------------------------------------------------- */
+  .page-sidebar {
+    width: 156px;
+    flex-shrink: 0;
+    max-height: 72vh;
+    overflow-y: auto;
+    background: var(--surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .page-sidebar.collapsed { display: none; }
+
+  .page-sidebar-header {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    padding: 0 2px;
+  }
+
+  .page-thumb-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .page-thumb {
+    border: 2px solid transparent;
+    border-radius: 8px;
+    padding: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
+  }
+  .page-thumb:hover { background: var(--surface-2); }
+  .page-thumb.active { border-color: var(--accent); background: var(--accent-wash); }
+  .page-thumb.drag-over { border-color: var(--accent); }
+
+  .page-thumb-image-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    background: var(--surface-2);
+    border-radius: 6px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .page-thumb-image {
+    max-width: 100%;
+    max-height: 100%;
+    display: block;
+    transition: transform 0.2s var(--ease);
+  }
+  .page-thumb-number {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--ink);
+    background: oklch(16% 0.015 250 / 80%);
+    padding: 1px 6px;
+    border-radius: 5px;
+    line-height: 1.5;
+  }
+
+  .page-thumb-actions {
+    display: flex;
+    justify-content: center;
+    gap: 2px;
+    margin-top: 4px;
+  }
+  .page-thumb-actions .icon-btn { width: 24px; height: 24px; }
+  .page-thumb-actions .icon-btn svg { width: 13px; height: 13px; }
 
   .canvas-shell {
     position: relative;
@@ -743,20 +837,37 @@
 
   <!-- Editor: PDF canvas + Fabric.js overlay -->
   <div id="editorArea" class="editor-area">
-    <div class="canvas-shell" id="canvasShell">
-      <div id="canvasWrap">
-        <canvas id="fabricCanvas"></canvas>
-        <div id="pasteHint" class="paste-hint">
-          <div class="paste-hint-badge">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
-            <span class="kbd-row"><kbd>Ctrl</kbd>+<kbd>V</kbd> to paste, or drop an image here</span>
-            <span class="sub">Its background is removed automatically</span>
+    <div class="editor-body">
+      <aside id="pageSidebar" class="page-sidebar">
+        <div class="page-sidebar-header">
+          <span>Pages</span>
+        </div>
+        <div id="pageThumbList" class="page-thumb-list"></div>
+      </aside>
+
+      <div class="editor-main">
+        <div class="canvas-shell" id="canvasShell">
+          <div id="canvasWrap">
+            <canvas id="fabricCanvas"></canvas>
+            <div id="pasteHint" class="paste-hint">
+              <div class="paste-hint-badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+                <span class="kbd-row"><kbd>Ctrl</kbd>+<kbd>V</kbd> to paste, or drop an image here</span>
+                <span class="sub">Its background is removed automatically</span>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
 
     <div class="canvas-toolbar">
+      <div class="toolbar-group">
+        <button class="icon-btn" id="toggleSidebarBtn" title="Toggle page panel" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+        </button>
+      </div>
+
+      <span class="divider"></span>
+
       <div class="toolbar-group">
         <button class="icon-btn" id="prevPageBtn" title="Previous page" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -833,6 +944,8 @@
       <span class="divider"></span>
       <button class="link-btn" id="startOverBtn" type="button">Start over</button>
     </div>
+      </div>
+    </div>
   </div>
 </main>
 
@@ -902,6 +1015,9 @@
   const prevPageBtn = document.getElementById("prevPageBtn");
   const nextPageBtn = document.getElementById("nextPageBtn");
   const pageIndicator = document.getElementById("pageIndicator");
+  const toggleSidebarBtn = document.getElementById("toggleSidebarBtn");
+  const pageSidebar = document.getElementById("pageSidebar");
+  const pageThumbList = document.getElementById("pageThumbList");
 
   const zoomOutBtn = document.getElementById("zoomOutBtn");
   const zoomInBtn = document.getElementById("zoomInBtn");
@@ -945,6 +1061,18 @@
   // LayerData (text)  = { kind:"text", text, fontSize, left, top, scaleX,
   //   scaleY, angle, naturalWidth, naturalHeight, opacity }
   const pageCache = new Map();
+
+  // Page management (thumbnail sidebar, rotate, delete, reorder). These are
+  // deliberately kept SEPARATE from pageCache/currentPageIndex: everywhere
+  // else in the app still identifies a page by its ORIGINAL 0-based index
+  // into the source PDF (unchanged meaning — no risk to the already-tricky
+  // layer-position math). `pageOrder` is purely a *display order* on top of
+  // that: the sequence of original indices to show/export, letting pages be
+  // reordered or removed without touching per-page layers/history at all.
+  let pageOrder = [];                 // original indices, in current display order
+  const pageRotations = new Map();    // originalIndex -> extra rotation in degrees (0/90/180/270)
+  const thumbnailCache = new Map();   // originalIndex -> small dataURL for the sidebar
+  let draggedThumbOriginalIndex = null;
 
   let isRestoring = false; // guards history/UI updates during programmatic canvas rebuilds
   let debouncedHistoryTimer = null; // debounce for nudge/opacity/font-size drags
@@ -1047,6 +1175,9 @@
       pdfProxy = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       numPages = pdfProxy.numPages;
       pageCache.clear();
+      pageRotations.clear();
+      thumbnailCache.clear();
+      pageOrder = Array.from({ length: numPages }, (_, i) => i);
       currentPageIndex = 0;
       hasUnsavedChanges = false;
 
@@ -1059,6 +1190,8 @@
       window.setTimeout(() => setStatus("", "idle"), 1800);
       recentFileBanner.hidden = true; // no longer relevant once a PDF is actually open
       saveLastPdfToDb(file); // best-effort local cache so next visit skips re-uploading
+
+      generateAllThumbnails(); // fire-and-forget — sidebar fills in as thumbnails finish
     } catch (err) {
       console.error(err);
       setStatus("Failed to load PDF", "error");
@@ -1186,6 +1319,10 @@
     numPages = 0;
     currentPageIndex = 0;
     pageCache.clear();
+    pageOrder = [];
+    pageRotations.clear();
+    thumbnailCache.clear();
+    pageThumbList.innerHTML = "";
     saveBtn.disabled = true;
     hasUnsavedChanges = false;
     setStatus("", "idle");
@@ -1232,6 +1369,7 @@
     updateUndoRedoButtons();
     updateSelectionButtons();
     updateSaveButtonState();
+    updateSidebarActiveThumb();
   }
 
   async function initFabricCanvasForPage(pageState) {
@@ -1276,17 +1414,182 @@
   }
 
   function updatePageIndicator() {
-    pageIndicator.textContent = `Page ${currentPageIndex + 1} of ${numPages}`;
-    prevPageBtn.disabled = currentPageIndex <= 0;
-    nextPageBtn.disabled = currentPageIndex >= numPages - 1;
+    // The visible page count/position follows the *display order*
+    // (pageOrder), which can differ from the raw original index once pages
+    // have been reordered or deleted.
+    const position = pageOrder.indexOf(currentPageIndex);
+    pageIndicator.textContent = `Page ${position + 1} of ${pageOrder.length}`;
+    prevPageBtn.disabled = position <= 0;
+    nextPageBtn.disabled = position >= pageOrder.length - 1;
   }
 
   prevPageBtn.addEventListener("click", () => {
-    if (currentPageIndex > 0) renderPage(currentPageIndex - 1);
+    const position = pageOrder.indexOf(currentPageIndex);
+    if (position > 0) renderPage(pageOrder[position - 1]);
   });
   nextPageBtn.addEventListener("click", () => {
-    if (currentPageIndex < numPages - 1) renderPage(currentPageIndex + 1);
+    const position = pageOrder.indexOf(currentPageIndex);
+    if (position < pageOrder.length - 1) renderPage(pageOrder[position + 1]);
   });
+
+  toggleSidebarBtn.addEventListener("click", () => {
+    pageSidebar.classList.toggle("collapsed");
+  });
+
+  // ---------------------------------------------------------------------
+  // Page sidebar — thumbnails, rotate, delete, drag-to-reorder
+  // ---------------------------------------------------------------------
+  async function generateThumbnail(originalIndex) {
+    const page = await pdfProxy.getPage(originalIndex + 1); // pdf.js pages are 1-based
+    const targetWidth = 130;
+    const baseViewport = page.getViewport({ scale: 1 });
+    const scale = targetWidth / baseViewport.width;
+    const viewport = page.getViewport({ scale });
+
+    const renderCanvas = document.createElement("canvas");
+    renderCanvas.width = viewport.width;
+    renderCanvas.height = viewport.height;
+    const ctx = renderCanvas.getContext("2d");
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    thumbnailCache.set(originalIndex, renderCanvas.toDataURL("image/png"));
+  }
+
+  async function generateAllThumbnails() {
+    // Sequential on purpose — keeps this gentle on pdf.js for large PDFs
+    // instead of firing dozens of concurrent getPage() calls at once.
+    for (let i = 0; i < numPages; i++) {
+      if (!thumbnailCache.has(i)) {
+        try {
+          await generateThumbnail(i);
+        } catch (err) {
+          console.warn("Could not render thumbnail for page", i + 1, err);
+        }
+      }
+      renderSidebar(); // fills in incrementally as each thumbnail finishes
+    }
+  }
+
+  function renderSidebar() {
+    pageThumbList.innerHTML = "";
+    pageOrder.forEach((originalIndex, position) => {
+      const item = document.createElement("div");
+      item.className = "page-thumb" + (originalIndex === currentPageIndex ? " active" : "");
+      item.draggable = true;
+      item.dataset.originalIndex = String(originalIndex);
+
+      const imageWrap = document.createElement("div");
+      imageWrap.className = "page-thumb-image-wrap";
+
+      const img = document.createElement("img");
+      img.className = "page-thumb-image";
+      img.alt = `Page ${position + 1}`;
+      const rotation = pageRotations.get(originalIndex) || 0;
+      if (rotation) img.style.transform = `rotate(${rotation}deg)`;
+      if (thumbnailCache.has(originalIndex)) img.src = thumbnailCache.get(originalIndex);
+      imageWrap.appendChild(img);
+
+      const number = document.createElement("span");
+      number.className = "page-thumb-number";
+      number.textContent = String(position + 1);
+      imageWrap.appendChild(number);
+
+      const actions = document.createElement("div");
+      actions.className = "page-thumb-actions";
+
+      const rotateBtn = document.createElement("button");
+      rotateBtn.type = "button";
+      rotateBtn.className = "icon-btn";
+      rotateBtn.title = "Rotate page";
+      rotateBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3.5-7.14"/><polyline points="21 3 21 9 15 9"/></svg>';
+      rotateBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        rotatePage(originalIndex);
+      });
+
+      const deleteThumbBtn = document.createElement("button");
+      deleteThumbBtn.type = "button";
+      deleteThumbBtn.className = "icon-btn danger";
+      deleteThumbBtn.title = "Delete page";
+      deleteThumbBtn.disabled = pageOrder.length <= 1;
+      deleteThumbBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+      deleteThumbBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        deletePage(originalIndex);
+      });
+
+      actions.appendChild(rotateBtn);
+      actions.appendChild(deleteThumbBtn);
+
+      item.appendChild(imageWrap);
+      item.appendChild(actions);
+
+      item.addEventListener("click", () => {
+        if (originalIndex !== currentPageIndex) renderPage(originalIndex);
+      });
+
+      item.addEventListener("dragstart", (e) => {
+        draggedThumbOriginalIndex = originalIndex;
+        e.dataTransfer.effectAllowed = "move";
+      });
+      item.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        item.classList.add("drag-over");
+      });
+      item.addEventListener("dragleave", () => {
+        item.classList.remove("drag-over");
+      });
+      item.addEventListener("drop", (e) => {
+        e.preventDefault();
+        item.classList.remove("drag-over");
+        if (draggedThumbOriginalIndex === null || draggedThumbOriginalIndex === originalIndex) return;
+        const fromPos = pageOrder.indexOf(draggedThumbOriginalIndex);
+        const toPos = pageOrder.indexOf(originalIndex);
+        if (fromPos === -1 || toPos === -1) return;
+        pageOrder.splice(fromPos, 1);
+        pageOrder.splice(toPos, 0, draggedThumbOriginalIndex);
+        draggedThumbOriginalIndex = null;
+        hasUnsavedChanges = true;
+        updateSaveButtonState();
+        updatePageIndicator();
+        renderSidebar();
+      });
+
+      pageThumbList.appendChild(item);
+    });
+  }
+
+  function updateSidebarActiveThumb() {
+    pageThumbList.querySelectorAll(".page-thumb").forEach((el) => {
+      el.classList.toggle("active", Number(el.dataset.originalIndex) === currentPageIndex);
+    });
+  }
+
+  function rotatePage(originalIndex) {
+    const current = pageRotations.get(originalIndex) || 0;
+    pageRotations.set(originalIndex, (current + 90) % 360);
+    hasUnsavedChanges = true;
+    updateSaveButtonState();
+    renderSidebar();
+  }
+
+  function deletePage(originalIndex) {
+    if (pageOrder.length <= 1) return; // always keep at least one page
+    const position = pageOrder.indexOf(originalIndex);
+    if (position === -1) return;
+    const wasActive = originalIndex === currentPageIndex;
+
+    pageOrder.splice(position, 1);
+    hasUnsavedChanges = true;
+    updateSaveButtonState();
+
+    if (wasActive) {
+      const nextPosition = Math.min(position, pageOrder.length - 1);
+      renderPage(pageOrder[nextPosition]).then(renderSidebar);
+    } else {
+      updatePageIndicator(); // total page count changed even though the active page didn't
+      renderSidebar();
+    }
+  }
 
   function updatePasteHintVisibility() {
     const count = fabricCanvas ? fabricCanvas.getObjects().length : 0;
@@ -1972,32 +2275,47 @@
         pageCache.get(currentPageIndex).layers = serializeCurrentLayers();
       }
 
+      // Rebuild the output from scratch via copyPages(pageOrder): this is
+      // what lets deleted pages simply not appear and reordered pages come
+      // out in their new sequence, in one step, using pdf-lib's own copy
+      // machinery rather than us hand-rolling page removal/reinsertion.
       const pdfBytes = await currentPdfFile.arrayBuffer();
-      const pdfDoc = await PDFDocument.load(pdfBytes);
-      const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      const pages = pdfDoc.getPages();
+      const srcDoc = await PDFDocument.load(pdfBytes);
+      const outDoc = await PDFDocument.create();
+      const helveticaFont = await outDoc.embedFont(StandardFonts.Helvetica);
 
-      for (const [pageIndex, state] of pageCache) {
-        if (!state.layers.length || !pages[pageIndex]) continue;
-        const page = pages[pageIndex];
-        const isLivePage = pageIndex === currentPageIndex && !!fabricCanvas;
+      const copiedPages = await outDoc.copyPages(srcDoc, pageOrder);
+      for (let i = 0; i < copiedPages.length; i++) {
+        const page = copiedPages[i];
+        outDoc.addPage(page);
+        const originalIndex = pageOrder[i];
+
+        const rotationDelta = pageRotations.get(originalIndex) || 0;
+        if (rotationDelta) {
+          const baseAngle = page.getRotation().angle;
+          page.setRotation(degrees((baseAngle + rotationDelta) % 360));
+        }
+
+        const state = pageCache.get(originalIndex);
+        if (!state || !state.layers.length) continue;
+        const isLivePage = originalIndex === currentPageIndex && !!fabricCanvas;
         const liveObjects = isLivePage ? fabricCanvas.getObjects() : null;
 
-        for (let i = 0; i < state.layers.length; i++) {
-          const layer = state.layers[i];
-          const centerCanvas = isLivePage && liveObjects[i]
-            ? liveObjects[i].getCenterPoint()
+        for (let j = 0; j < state.layers.length; j++) {
+          const layer = state.layers[j];
+          const centerCanvas = isLivePage && liveObjects[j]
+            ? liveObjects[j].getCenterPoint()
             : computeCanvasCenterFromLayer(layer);
 
           if (layer.kind === "text") {
             embedTextLayer(page, layer, state.canvasWidth, state.canvasHeight, centerCanvas, helveticaFont);
           } else {
-            await embedImageLayer(pdfDoc, page, layer, state.canvasWidth, state.canvasHeight, centerCanvas);
+            await embedImageLayer(outDoc, page, layer, state.canvasWidth, state.canvasHeight, centerCanvas);
           }
         }
       }
 
-      const outBytes = await pdfDoc.save();
+      const outBytes = await outDoc.save();
       const pdfBlob = new Blob([outBytes], { type: "application/pdf" });
       const downloadUrl = URL.createObjectURL(pdfBlob);
       const baseName = currentPdfFile.name.replace(/\.pdf$/i, "");
