@@ -354,6 +354,23 @@
   }
   .privacy-note svg { width: 13px; height: 13px; flex-shrink: 0; }
 
+  .recent-file-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin-bottom: 22px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    background: var(--surface-2);
+    text-align: left;
+  }
+  .recent-file-banner svg { width: 18px; height: 18px; color: var(--muted); flex-shrink: 0; }
+  .recent-file-text { flex: 1; font-size: 13px; color: var(--muted); min-width: 0; }
+  .recent-file-text strong { color: var(--ink); font-weight: 600; word-break: break-all; }
+  .recent-file-banner .btn { padding: 7px 14px; font-size: 13px; flex-shrink: 0; }
+
   /* Editor area ------------------------------------------------------- */
   .editor-area {
     display: flex;
@@ -688,6 +705,16 @@
     </div>
     <h2>Drop a PDF, or choose one</h2>
     <p>Paste or drag images onto the page afterward — backgrounds are cut out automatically and dropped onto the document. Works on any page, and you can add more than one image, plus text labels.</p>
+
+    <div id="recentFileBanner" class="recent-file-banner" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M15 3v5h5"/></svg>
+      <span class="recent-file-text">Continue with <strong id="recentFileName"></strong>?</span>
+      <button class="btn secondary" id="continueRecentBtn" type="button">Continue</button>
+      <button class="icon-btn" id="clearRecentBtn" title="Forget this file" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
     <label class="btn" for="pdfInput">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M7 9l5-5 5 5"/><path d="M12 4v12"/></svg>
       Choose PDF
@@ -858,6 +885,10 @@
   const fileNameLabel = document.getElementById("fileNameLabel");
   const startOverBtn = document.getElementById("startOverBtn");
   const canvasShell = document.getElementById("canvasShell");
+  const recentFileBanner = document.getElementById("recentFileBanner");
+  const recentFileName = document.getElementById("recentFileName");
+  const continueRecentBtn = document.getElementById("continueRecentBtn");
+  const clearRecentBtn = document.getElementById("clearRecentBtn");
 
   const prevPageBtn = document.getElementById("prevPageBtn");
   const nextPageBtn = document.getElementById("nextPageBtn");
@@ -1015,6 +1046,8 @@
       fileNameLabel.textContent = file.name;
       setStatus("PDF loaded", "success");
       window.setTimeout(() => setStatus("", "idle"), 1800);
+      recentFileBanner.hidden = true; // no longer relevant once a PDF is actually open
+      saveLastPdfToDb(file); // best-effort local cache so next visit skips re-uploading
     } catch (err) {
       console.error(err);
       setStatus("Failed to load PDF", "error");
@@ -1043,6 +1076,95 @@
     const file = e.dataTransfer?.files?.[0];
     if (file) loadPdfFile(file);
   });
+
+  // ---------------------------------------------------------------------
+  // Remember the last uploaded PDF locally (IndexedDB) so re-opening the
+  // page — or testing after a redeploy — doesn't require re-uploading
+  // every time. Nothing leaves the device, same as everything else here.
+  // ---------------------------------------------------------------------
+  const RECENT_DB_NAME = "cutout-pdf-editor";
+  const RECENT_STORE_NAME = "lastFile";
+
+  function openRecentDb() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(RECENT_DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        req.result.createObjectStore(RECENT_STORE_NAME);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function saveLastPdfToDb(file) {
+    try {
+      const bytes = await file.arrayBuffer();
+      const db = await openRecentDb();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(RECENT_STORE_NAME, "readwrite");
+        tx.objectStore(RECENT_STORE_NAME).put({ name: file.name, bytes, savedAt: Date.now() }, "last");
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    } catch (err) {
+      console.warn("Could not remember this PDF for next time:", err);
+    }
+  }
+
+  async function getLastPdfFromDb() {
+    try {
+      const db = await openRecentDb();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(RECENT_STORE_NAME, "readonly");
+        const req = tx.objectStore(RECENT_STORE_NAME).get("last");
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      });
+    } catch (err) {
+      return null;
+    }
+  }
+
+  async function clearLastPdfFromDb() {
+    try {
+      const db = await openRecentDb();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(RECENT_STORE_NAME, "readwrite");
+        tx.objectStore(RECENT_STORE_NAME).delete("last");
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    } catch (err) {
+      // Nothing to do — worst case the banner just won't disappear until reload.
+    }
+  }
+
+  continueRecentBtn.addEventListener("click", async () => {
+    continueRecentBtn.disabled = true;
+    const record = await getLastPdfFromDb();
+    continueRecentBtn.disabled = false;
+    if (!record) {
+      recentFileBanner.hidden = true;
+      return;
+    }
+    const file = new File([record.bytes], record.name, { type: "application/pdf" });
+    loadPdfFile(file);
+  });
+
+  clearRecentBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    await clearLastPdfFromDb();
+    recentFileBanner.hidden = true;
+  });
+
+  (async function showRecentFileBannerIfAny() {
+    if (!window.indexedDB) return; // very old browser — silently skip
+    const record = await getLastPdfFromDb();
+    if (record) {
+      recentFileName.textContent = record.name;
+      recentFileBanner.hidden = false;
+    }
+  })();
 
   startOverBtn.addEventListener("click", () => {
     editorArea.classList.remove("visible");
