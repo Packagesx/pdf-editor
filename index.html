@@ -6,6 +6,16 @@
 <title>Cutout · PDF Background Remover</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2349de78'/%3E%3Cpath d='M20 14h16l10 10v26a2 2 0 0 1-2 2H20a2 2 0 0 1-2-2V16a2 2 0 0 1 2-2z' fill='%23041107'/%3E%3Cpath d='M36 14v8a2 2 0 0 0 2 2h8z' fill='%2349de78'/%3E%3Crect x='22' y='38' width='16' height='12' rx='2' fill='none' stroke='%2349de78' stroke-width='2' stroke-dasharray='3 3'/%3E%3C/svg%3E" />
 
+<!-- PWA: installable + works offline after the first visit (see sw.js).
+     manifest.json/sw.js/icon-*.svg must sit next to this file when deployed. -->
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#49de78" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Cutout PDF" />
+<link rel="apple-touch-icon" href="icon-source.svg" />
+
 <!--
   100% client-side version. Everything (PDF render, AI background removal,
   and PDF export) runs in the browser tab — nothing is uploaded anywhere.
@@ -103,18 +113,6 @@
   /* ---------------------------------------------------------------- */
   /* Top bar                                                           */
   /* ---------------------------------------------------------------- */
-  .topbar {
-    position: sticky;
-    top: 0;
-    z-index: 30;
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    padding: 12px 24px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border-subtle);
-  }
-
   .brand {
     display: flex;
     align-items: center;
@@ -306,7 +304,7 @@
     display: flex;
     justify-content: center;
     padding: 40px 20px 64px;
-    min-height: calc(100vh - 57px);
+    min-height: calc(100vh - 150px); /* approximate two-row ribbon header height — only affects centering, not a hard constraint */
   }
 
   /* Dropzone / empty state ------------------------------------------ */
@@ -623,24 +621,25 @@
   }
   .paste-hint-badge .sub { font-size: 12px; color: var(--muted); }
 
-  /* Canvas toolbar — page nav, zoom, undo/redo, layer actions, file info */
-  .canvas-toolbar {
+  /* Slim persistent status bar — page nav, zoom, file name. Sits below the
+     canvas in the same spot the old single-row canvas-toolbar used to; all
+     the actual editing tools live in the ribbon (see below) instead. */
+  .status-bar {
     display: flex;
     align-items: center;
     gap: 10px;
     font-size: 12.5px;
     color: var(--muted);
     flex-wrap: wrap;
-    justify-content: center;
     max-width: 100%;
     padding: 6px 10px;
     background: var(--surface);
     border: 1px solid var(--border-subtle);
     border-radius: 10px;
   }
-  .toolbar-group { display: flex; align-items: center; gap: 2px; }
-  .canvas-toolbar .divider { width: 1px; height: 18px; background: var(--border-subtle); flex-shrink: 0; }
-  .canvas-toolbar .file-name { color: var(--ink); font-weight: 600; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status-bar .divider { width: 1px; height: 18px; background: var(--border-subtle); flex-shrink: 0; }
+  .status-bar .file-name { color: var(--ink); font-weight: 600; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status-bar-spacer { flex: 1; }
 
   .page-indicator {
     font-size: 12.5px;
@@ -667,36 +666,162 @@
   }
   .zoom-label:hover { background: var(--surface-2); }
 
-  .tool-label {
-    font-size: 12px;
-    color: var(--muted);
-    white-space: nowrap;
+  /* ---------------------------------------------------------------- */
+  /* Ribbon (tabbed toolbar) — Lyncub-style: a row of tabs, each showing */
+  /* its own row of captioned icon+label button groups underneath.      */
+  /* ---------------------------------------------------------------- */
+  .app-header {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border-subtle);
   }
 
-  .toolbar-slider {
+  .header-top {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 20px;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border-subtle);
   }
-  .toolbar-slider input[type="range"] {
-    accent-color: var(--accent);
-    width: 80px;
-  }
-  .toolbar-slider input[type="range"]:disabled { opacity: 0.4; }
 
-  .link-btn {
+  .ribbon-tabs {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .ribbon-tab {
     background: none;
     border: none;
     color: var(--muted);
-    font-size: 12.5px;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 7px 14px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background 0.15s var(--ease), color 0.15s var(--ease);
+  }
+  .ribbon-tab:hover { color: var(--ink); background: var(--surface-2); }
+  .ribbon-tab.active { color: var(--accent-ink); background: var(--accent); }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+  }
+
+  .ribbon-panels {
+    padding: 10px 20px;
+    overflow-x: auto;
+  }
+  .ribbon-panel {
+    display: none;
+    align-items: stretch;
+    gap: 4px;
+  }
+  .ribbon-panel.active { display: flex; }
+
+  .ribbon-divider {
+    width: 1px;
+    align-self: stretch;
+    background: var(--border-subtle);
+    flex-shrink: 0;
+    margin: 0 6px;
+  }
+
+  .ribbon-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .ribbon-group-buttons {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+  }
+  .ribbon-group-buttons--controls { gap: 8px; }
+  .ribbon-group-caption {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+  }
+
+  /* Icon-on-top, label-below button used for ribbon actions (as opposed to
+     .icon-btn, which stays icon-only for dense contexts like page-thumb
+     actions and modals). */
+  .ribbon-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 60px;
+    padding: 8px 4px 6px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--ink);
+    font-size: 11px;
     font-weight: 600;
     cursor: pointer;
-    padding: 0;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-    transition: color 0.15s var(--ease);
+    transition: background 0.15s var(--ease), color 0.15s var(--ease);
   }
-  .link-btn:hover { color: var(--ink); }
+  .ribbon-btn svg { width: 19px; height: 19px; }
+  .ribbon-btn span { white-space: nowrap; }
+  .ribbon-btn:hover:not(:disabled) { background: var(--surface-2); }
+  .ribbon-btn:disabled { color: var(--border); cursor: not-allowed; }
+  .ribbon-btn.danger:hover:not(:disabled) { color: var(--danger); background: var(--danger-wash); }
+  .ribbon-btn.active { background: var(--accent); color: var(--accent-ink); }
+
+  /* Compact icon-only ribbon button, for dense rows like Draw tools and
+     Align/Distribute where a 60px labeled button per icon would be too wide. */
+  .ribbon-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 7px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.15s var(--ease), color 0.15s var(--ease);
+  }
+  .ribbon-icon-btn svg { width: 16px; height: 16px; }
+  .ribbon-icon-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
+  .ribbon-icon-btn:disabled { color: var(--border); cursor: not-allowed; }
+  .ribbon-icon-btn.active { background: var(--accent); color: var(--accent-ink); }
+  .ribbon-icon-btn.active:hover:not(:disabled) { background: var(--accent-hover); color: var(--accent-ink); }
+
+  .ribbon-slider-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: var(--muted);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .ribbon-slider-label input[type="range"] {
+    accent-color: var(--accent);
+    width: 70px;
+  }
+  .ribbon-slider-label input[type="range"]:disabled { opacity: 0.4; }
+
+  .ribbon-hint {
+    font-size: 12.5px;
+    color: var(--muted);
+    max-width: 32ch;
+    line-height: 1.5;
+  }
 
   /* ---------------------------------------------------------------- */
   /* Refine-edges modal                                                 */
@@ -945,36 +1070,321 @@
     flex-wrap: wrap;
   }
   .modal-footer-right { display: flex; gap: 8px; }
+
+  /* ---------------------------------------------------------------- */
+  /* Form fields modal                                                  */
+  /* ---------------------------------------------------------------- */
+  .form-fields-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .form-field-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .form-field-label {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .form-field-row input[type="text"],
+  .form-field-row select {
+    width: 100%;
+    padding: 9px 11px;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-2);
+    color: var(--ink);
+    font-size: 13.5px;
+  }
+  .form-field-row input[type="text"]:focus,
+  .form-field-row select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .form-field-checkbox-row,
+  .form-field-radio-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13.5px;
+  }
+  .form-field-radio-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-fields-empty {
+    text-align: center;
+    padding: 24px 16px;
+    color: var(--muted);
+    font-size: 13.5px;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Find modal                                                         */
+  /* ---------------------------------------------------------------- */
+  .find-status {
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+  .find-results-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+  .find-result-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-2);
+    cursor: pointer;
+    text-align: left;
+    color: var(--ink);
+    font-size: 13px;
+  }
+  .find-result-item:hover { border-color: var(--accent); }
+  .find-result-page {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .find-result-snippet { color: var(--muted); line-height: 1.4; }
+  .find-result-snippet mark {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-radius: 2px;
+    padding: 0 1px;
+  }
 </style>
 </head>
 <body>
 
-<header class="topbar">
-  <div class="brand">
-    <span class="brand-mark">
-      <svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" fill="#041107"/><rect x="8" y="14" width="7" height="5" rx="1" stroke="#49de78" stroke-width="1.4" stroke-dasharray="2 2" fill="none"/></svg>
-    </span>
-    <span class="brand-name">Cutout <span class="dim">· PDF background remover</span></span>
+<header class="app-header">
+  <div class="header-top">
+    <div class="brand">
+      <span class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" fill="#041107"/><rect x="8" y="14" width="7" height="5" rx="1" stroke="#49de78" stroke-width="1.4" stroke-dasharray="2 2" fill="none"/></svg>
+      </span>
+      <span class="brand-name">Cutout <span class="dim">· PDF editor</span></span>
+    </div>
+
+    <nav class="ribbon-tabs" id="ribbonTabs">
+      <button class="ribbon-tab active" data-tab="home" type="button">Home</button>
+      <button class="ribbon-tab" data-tab="edit" type="button">Edit</button>
+      <button class="ribbon-tab" data-tab="draw" type="button">Draw</button>
+      <button class="ribbon-tab" data-tab="form" type="button">Form</button>
+      <button class="ribbon-tab" data-tab="sign" type="button">Sign</button>
+    </nav>
+
+    <div class="header-right">
+      <span id="statusPill" class="status-pill"></span>
+      <button class="btn" id="saveBtn" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+        Save &amp; Export
+      </button>
+    </div>
   </div>
 
-  <span id="statusPill" class="status-pill"></span>
+  <div class="ribbon-panels">
+    <div class="ribbon-panel active" data-tab="home">
+      <div class="ribbon-group">
+        <div class="ribbon-group-buttons">
+          <button class="ribbon-btn" id="undoBtn" title="Undo (Ctrl+Z)" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            <span>Undo</span>
+          </button>
+          <button class="ribbon-btn" id="redoBtn" title="Redo (Ctrl+Shift+Z)" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            <span>Redo</span>
+          </button>
+        </div>
+        <span class="ribbon-group-caption">History</span>
+      </div>
 
-  <label class="btn secondary" for="pdfInput">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M7 9l5-5 5 5"/><path d="M12 4v12"/></svg>
-    Upload PDF
-  </label>
-  <input type="file" id="pdfInput" accept="application/pdf" multiple />
+      <span class="ribbon-divider"></span>
 
-  <button class="btn secondary" id="mergeBtn" title="Add another PDF's pages to the end of this one" type="button" disabled>
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="12" height="15" rx="2"/><path d="M9 12h9M18 12l-3-3M18 12l-3 3"/></svg>
-    Merge PDF
-  </button>
-  <input type="file" id="mergeInput" accept="application/pdf" hidden />
+      <div class="ribbon-group">
+        <div class="ribbon-group-buttons">
+          <label class="ribbon-btn" for="pdfInput">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M7 9l5-5 5 5"/><path d="M12 4v12"/></svg>
+            <span>Upload</span>
+          </label>
+          <input type="file" id="pdfInput" accept="application/pdf" multiple />
+          <button class="ribbon-btn" id="mergeBtn" title="Add another PDF's pages to the end of this one" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="12" height="15" rx="2"/><path d="M9 12h9M18 12l-3-3M18 12l-3 3"/></svg>
+            <span>Merge</span>
+          </button>
+          <input type="file" id="mergeInput" accept="application/pdf" hidden />
+          <button class="ribbon-btn" id="startOverBtn" title="Start over" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/></svg>
+            <span>Start over</span>
+          </button>
+        </div>
+        <span class="ribbon-group-caption">File</span>
+      </div>
 
-  <button class="btn" id="saveBtn" disabled>
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-    Save &amp; Export
-  </button>
+      <span class="ribbon-divider"></span>
+
+      <div class="ribbon-group">
+        <div class="ribbon-group-buttons">
+          <button class="ribbon-btn" id="findBtn" title="Find text in this document" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span>Find</span>
+          </button>
+        </div>
+        <span class="ribbon-group-caption">Search</span>
+      </div>
+    </div>
+
+    <div class="ribbon-panel" data-tab="edit">
+      <div class="ribbon-group">
+        <div class="ribbon-group-buttons">
+          <button class="ribbon-btn" id="addTextBtn" title="Add text" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+            <span>Add text</span>
+          </button>
+          <button class="ribbon-btn" id="uploadImageBtn" title="Upload image" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+            <span>Image</span>
+          </button>
+          <input type="file" id="imageInput" accept="image/*" hidden />
+          <button class="ribbon-btn" id="duplicateBtn" title="Duplicate (Ctrl+D)" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span>Duplicate</span>
+          </button>
+          <button class="ribbon-btn" id="refineBtn" title="Refine edges" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.06 11.9l8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></svg>
+            <span>Refine</span>
+          </button>
+          <button class="ribbon-btn danger" id="deleteBtn" title="Delete selected (Delete)" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+            <span>Delete</span>
+          </button>
+        </div>
+        <span class="ribbon-group-caption">Content</span>
+      </div>
+
+      <span class="ribbon-divider"></span>
+
+      <div class="ribbon-group">
+        <div class="ribbon-group-buttons ribbon-group-buttons--controls">
+          <select id="textFontSelect" title="Font" disabled>
+            <option value="helvetica">Helvetica</option>
+            <option value="times">Times</option>
+            <option value="courier">Courier</option>
+          </select>
+          <button class="ribbon-icon-btn" id="textBoldBtn" title="Bold" type="button" disabled>B</button>
+          <button class="ribbon-icon-btn" id="textItalicBtn" title="Italic" type="button" disabled>I</button>
+          <input type="color" id="textColorInput" value="#111111" title="Text color" disabled />
+          <label class="ribbon-slider-label">Size
+            <input type="range" id="fontSizeSlider" min="8" max="120" value="24" disabled />
+          </label>
+          <label class="ribbon-slider-label">Opacity
+            <input type="range" id="opacitySlider" min="0" max="100" value="100" disabled />
+          </label>
+        </div>
+        <span class="ribbon-group-caption">Format</span>
+      </div>
+
+      <span class="ribbon-divider"></span>
+
+      <div class="ribbon-group">
+        <div class="ribbon-group-buttons" id="alignGroup">
+          <button class="ribbon-icon-btn" id="alignLeftBtn" title="Align left" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="3" x2="4" y2="21"/><rect x="7" y="6" width="12" height="4"/><rect x="7" y="14" width="7" height="4"/></svg>
+          </button>
+          <button class="ribbon-icon-btn" id="alignHCenterBtn" title="Align center (horizontal)" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="3" x2="12" y2="21"/><rect x="6" y="6" width="12" height="4"/><rect x="8.5" y="14" width="7" height="4"/></svg>
+          </button>
+          <button class="ribbon-icon-btn" id="alignRightBtn" title="Align right" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="20" y1="3" x2="20" y2="21"/><rect x="5" y="6" width="12" height="4"/><rect x="10" y="14" width="7" height="4"/></svg>
+          </button>
+          <button class="ribbon-icon-btn" id="alignTopBtn" title="Align top" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="4" x2="21" y2="4"/><rect x="6" y="7" width="4" height="12"/><rect x="14" y="7" width="4" height="7"/></svg>
+          </button>
+          <button class="ribbon-icon-btn" id="alignVMiddleBtn" title="Align middle (vertical)" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><rect x="6" y="6" width="4" height="12"/><rect x="14" y="8.5" width="4" height="7"/></svg>
+          </button>
+          <button class="ribbon-icon-btn" id="alignBottomBtn" title="Align bottom" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="20" x2="21" y2="20"/><rect x="6" y="5" width="4" height="12"/><rect x="14" y="10" width="4" height="7"/></svg>
+          </button>
+          <button class="ribbon-icon-btn" id="distributeHBtn" title="Distribute horizontal spacing" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="4" height="10"/><rect x="10" y="7" width="4" height="10"/><rect x="17" y="7" width="4" height="10"/></svg>
+          </button>
+          <button class="ribbon-icon-btn" id="distributeVBtn" title="Distribute vertical spacing" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="4"/><rect x="7" y="10" width="10" height="4"/><rect x="7" y="17" width="10" height="4"/></svg>
+          </button>
+        </div>
+        <span class="ribbon-group-caption">Arrange</span>
+      </div>
+    </div>
+
+    <div class="ribbon-panel" data-tab="draw">
+      <div class="ribbon-group">
+        <div class="ribbon-group-buttons">
+          <button class="ribbon-icon-btn active" id="selectToolBtn" title="Select (click a shape to move/resize it, or press Escape)" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l7 17 2-7 7-2z"/></svg>
+          </button>
+          <button class="ribbon-icon-btn" id="penToolBtn" title="Pen" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+          </button>
+          <button class="ribbon-icon-btn" id="highlightToolBtn" title="Highlighter" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l6 6"/><path d="M4 20l3.5-1 8-8-2.5-2.5-8 8L4 20z"/><path d="M14.5 6.5L18 3l3 3-3.5 3.5"/></svg>
+          </button>
+          <button class="ribbon-icon-btn" id="lineToolBtn" title="Line" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="19" x2="19" y2="5"/></svg>
+          </button>
+          <button class="ribbon-icon-btn" id="arrowToolBtn" title="Arrow" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="19" x2="19" y2="5"/><polyline points="9 5 19 5 19 15"/></svg>
+          </button>
+          <button class="ribbon-icon-btn" id="rectToolBtn" title="Rectangle" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1"/></svg>
+          </button>
+          <button class="ribbon-icon-btn" id="ellipseToolBtn" title="Ellipse" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="12" rx="9" ry="7"/></svg>
+          </button>
+          <button class="ribbon-icon-btn" id="redactToolBtn" title="Redact (permanently covers the area — see note)" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="1" fill="currentColor"/></svg>
+          </button>
+          <input type="color" id="strokeColorInput" value="#e11d48" title="Color" disabled />
+          <input type="range" id="strokeWidthSlider" min="1" max="24" value="3" title="Stroke width" disabled />
+        </div>
+        <span class="ribbon-group-caption">Tools</span>
+      </div>
+    </div>
+
+    <div class="ribbon-panel" data-tab="form">
+      <div class="ribbon-group">
+        <div class="ribbon-group-buttons">
+          <button class="ribbon-btn" id="formFieldsBtn" title="Fill out this PDF's form fields" type="button" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="13" y2="13"/></svg>
+            <span>Fill form</span>
+          </button>
+          <span class="ribbon-hint">Only appears when the loaded PDF has fillable form fields.</span>
+        </div>
+        <span class="ribbon-group-caption">Form fields</span>
+      </div>
+    </div>
+
+    <div class="ribbon-panel" data-tab="sign">
+      <div class="ribbon-group">
+        <div class="ribbon-group-buttons">
+          <button class="ribbon-btn" id="signatureBtn" title="Add signature" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c2-4 4 4 6 0s3-8 5-4 3 6 5 2"/><path d="M3 21h18"/></svg>
+            <span>Signature</span>
+          </button>
+          <button class="ribbon-btn" id="stampBtn" title="Insert a previously uploaded image" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="13" height="13" rx="2"/><path d="M8 21h10a2 2 0 0 0 2-2V9"/><circle cx="7.5" cy="7.5" r="1.5"/><path d="M3 13l3-3 5 5"/></svg>
+            <span>Saved images</span>
+          </button>
+        </div>
+        <span class="ribbon-group-caption">Sign &amp; stamp</span>
+      </div>
+    </div>
+  </div>
 </header>
 
 <main>
@@ -1045,143 +1455,34 @@
           </div>
         </div>
 
-    <div class="canvas-toolbar">
-      <div class="toolbar-group">
-        <button class="icon-btn" id="toggleSidebarBtn" title="Toggle page panel" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
-        </button>
-      </div>
+    <div class="status-bar">
+      <button class="icon-btn" id="toggleSidebarBtn" title="Toggle page panel" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+      </button>
 
       <span class="divider"></span>
 
-      <div class="toolbar-group">
-        <button class="icon-btn" id="prevPageBtn" title="Previous page" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
-        <span class="page-indicator" id="pageIndicator">Page 1 of 1</span>
-        <button class="icon-btn" id="nextPageBtn" title="Next page" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-      </div>
+      <button class="icon-btn" id="prevPageBtn" title="Previous page" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span class="page-indicator" id="pageIndicator">Page 1 of 1</span>
+      <button class="icon-btn" id="nextPageBtn" title="Next page" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
 
       <span class="divider"></span>
 
-      <div class="toolbar-group">
-        <button class="icon-btn" id="zoomOutBtn" title="Zoom out" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
-        <button class="zoom-label" id="zoomLabel" title="Reset zoom" type="button">100%</button>
-        <button class="icon-btn" id="zoomInBtn" title="Zoom in" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
-      </div>
+      <button class="icon-btn" id="zoomOutBtn" title="Zoom out" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <button class="zoom-label" id="zoomLabel" title="Reset zoom" type="button">100%</button>
+      <button class="icon-btn" id="zoomInBtn" title="Zoom in" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
 
-      <span class="divider"></span>
-
-      <div class="toolbar-group">
-        <button class="icon-btn" id="undoBtn" title="Undo (Ctrl+Z)" type="button" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-        </button>
-        <button class="icon-btn" id="redoBtn" title="Redo (Ctrl+Shift+Z)" type="button" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-        </button>
-      </div>
-
-      <span class="divider"></span>
-
-      <div class="toolbar-group">
-        <button class="icon-btn" id="uploadImageBtn" title="Upload image" type="button" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-        </button>
-        <input type="file" id="imageInput" accept="image/*" hidden />
-      </div>
-
-      <span class="divider"></span>
-
-      <div class="toolbar-group">
-        <button class="icon-btn" id="addTextBtn" title="Add text" type="button" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
-        </button>
-        <button class="icon-btn" id="duplicateBtn" title="Duplicate (Ctrl+D)" type="button" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-        </button>
-        <button class="icon-btn" id="refineBtn" title="Refine edges" type="button" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.06 11.9l8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></svg>
-        </button>
-        <button class="icon-btn danger" id="deleteBtn" title="Delete selected (Delete)" type="button" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-        </button>
-      </div>
-
-      <span class="divider"></span>
-
-      <div class="toolbar-group">
-        <button class="icon-btn active" id="selectToolBtn" title="Select (click a shape to move/resize it, or press Escape)" type="button" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l7 17 2-7 7-2z"/></svg>
-        </button>
-        <button class="icon-btn" id="penToolBtn" title="Pen" type="button" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
-        </button>
-        <button class="icon-btn" id="highlightToolBtn" title="Highlighter" type="button" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l6 6"/><path d="M4 20l3.5-1 8-8-2.5-2.5-8 8L4 20z"/><path d="M14.5 6.5L18 3l3 3-3.5 3.5"/></svg>
-        </button>
-        <button class="icon-btn" id="lineToolBtn" title="Line" type="button" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="19" x2="19" y2="5"/></svg>
-        </button>
-        <button class="icon-btn" id="arrowToolBtn" title="Arrow" type="button" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="19" x2="19" y2="5"/><polyline points="9 5 19 5 19 15"/></svg>
-        </button>
-        <button class="icon-btn" id="rectToolBtn" title="Rectangle" type="button" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1"/></svg>
-        </button>
-        <button class="icon-btn" id="ellipseToolBtn" title="Ellipse" type="button" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="12" rx="9" ry="7"/></svg>
-        </button>
-        <button class="icon-btn" id="redactToolBtn" title="Redact (permanently covers the area — see note)" type="button" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="1" fill="currentColor"/></svg>
-        </button>
-        <input type="color" id="strokeColorInput" value="#e11d48" title="Color" disabled />
-        <input type="range" id="strokeWidthSlider" min="1" max="24" value="3" title="Stroke width" disabled />
-      </div>
-
-      <span class="divider"></span>
-
-      <div class="toolbar-group">
-        <button class="icon-btn" id="signatureBtn" title="Add signature" type="button" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c2-4 4 4 6 0s3-8 5-4 3 6 5 2"/><path d="M3 21h18"/></svg>
-        </button>
-        <button class="icon-btn" id="stampBtn" title="Insert a previously uploaded image" type="button" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="13" height="13" rx="2"/><path d="M8 21h10a2 2 0 0 0 2-2V9"/><circle cx="7.5" cy="7.5" r="1.5"/><path d="M3 13l3-3 5 5"/></svg>
-        </button>
-      </div>
-
-      <span class="divider"></span>
-
-      <div class="toolbar-slider">
-        <span class="tool-label">Opacity</span>
-        <input type="range" id="opacitySlider" min="0" max="100" value="100" disabled />
-      </div>
-      <div class="toolbar-slider">
-        <span class="tool-label">Text size</span>
-        <input type="range" id="fontSizeSlider" min="8" max="120" value="24" disabled />
-      </div>
-
-      <div class="toolbar-group" id="textFormatGroup">
-        <select id="textFontSelect" title="Font" disabled>
-          <option value="helvetica">Helvetica</option>
-          <option value="times">Times</option>
-          <option value="courier">Courier</option>
-        </select>
-        <button class="icon-btn" id="textBoldBtn" title="Bold" type="button" disabled>B</button>
-        <button class="icon-btn" id="textItalicBtn" title="Italic" type="button" disabled>I</button>
-        <input type="color" id="textColorInput" value="#111111" title="Text color" disabled />
-      </div>
-
-      <span class="divider"></span>
+      <span class="status-bar-spacer"></span>
 
       <span class="file-name" id="fileNameLabel"></span>
-      <span class="divider"></span>
-      <button class="link-btn" id="startOverBtn" type="button">Start over</button>
     </div>
       </div>
     </div>
@@ -1281,13 +1582,55 @@
   </div>
 </div>
 
+<!-- Form fields modal: fill in this PDF's existing AcroForm fields -->
+<div id="formFieldsModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Fill form" hidden>
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h3>Fill out this PDF's form</h3>
+      <button class="icon-btn" id="closeFormFieldsBtn" title="Close" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="refine-body">
+      <p class="refine-hint">Values are baked into the PDF as flat text/marks when you use Save &amp; Export — the fields won't stay fillable in the downloaded file.</p>
+      <div id="formFieldsList" class="form-fields-list"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn secondary" id="resetFormFieldsBtn" type="button">Reset to original values</button>
+      <div class="modal-footer-right">
+        <button class="btn" id="doneFormFieldsBtn" type="button">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Find modal: search this document's text (via pdf.js), jump to matching pages -->
+<div id="findModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Find text" hidden>
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h3>Find in document</h3>
+      <button class="icon-btn" id="closeFindBtn" title="Close" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="refine-body">
+      <input type="text" id="findInput" class="sig-text-input" placeholder="Search text…" autocomplete="off" style="margin-bottom:0;" />
+      <div id="findStatus" class="find-status"></div>
+      <div id="findResultsList" class="find-results-list"></div>
+    </div>
+  </div>
+</div>
+
 <script type="module">
   // ---------------------------------------------------------------------
   // Client-side-only library imports (no build step / bundler required).
   // esm.sh serves npm packages as browser-ready ES modules.
   // ---------------------------------------------------------------------
   import { removeBackground as imglyRemoveBackground } from "https://esm.sh/@imgly/background-removal@1.5.8";
-  import { PDFDocument, degrees, rgb, StandardFonts } from "https://esm.sh/pdf-lib@1.17.1";
+  import {
+    PDFDocument, degrees, rgb, StandardFonts,
+    PDFTextField, PDFCheckBox, PDFRadioGroup, PDFDropdown, PDFOptionList,
+  } from "https://esm.sh/pdf-lib@1.17.1";
 
   // ---------------------------------------------------------------------
   // Setup
@@ -1377,6 +1720,29 @@
   const closeStampBtn = document.getElementById("closeStampBtn");
   const stampGrid = document.getElementById("stampGrid");
 
+  const formFieldsBtn = document.getElementById("formFieldsBtn");
+  const formFieldsModal = document.getElementById("formFieldsModal");
+  const formFieldsList = document.getElementById("formFieldsList");
+  const closeFormFieldsBtn = document.getElementById("closeFormFieldsBtn");
+  const resetFormFieldsBtn = document.getElementById("resetFormFieldsBtn");
+  const doneFormFieldsBtn = document.getElementById("doneFormFieldsBtn");
+
+  const findBtn = document.getElementById("findBtn");
+  const findModal = document.getElementById("findModal");
+  const findInput = document.getElementById("findInput");
+  const findStatus = document.getElementById("findStatus");
+  const findResultsList = document.getElementById("findResultsList");
+  const closeFindBtn = document.getElementById("closeFindBtn");
+
+  const alignLeftBtn = document.getElementById("alignLeftBtn");
+  const alignHCenterBtn = document.getElementById("alignHCenterBtn");
+  const alignRightBtn = document.getElementById("alignRightBtn");
+  const alignTopBtn = document.getElementById("alignTopBtn");
+  const alignVMiddleBtn = document.getElementById("alignVMiddleBtn");
+  const alignBottomBtn = document.getElementById("alignBottomBtn");
+  const distributeHBtn = document.getElementById("distributeHBtn");
+  const distributeVBtn = document.getElementById("distributeVBtn");
+
   // ---- Core state --------------------------------------------------
   let pdfProxy = null;          // pdf.js document proxy for the loaded file
   let numPages = 0;
@@ -1407,6 +1773,17 @@
   const pageRotations = new Map();    // originalIndex -> extra rotation in degrees (0/90/180/270)
   const thumbnailCache = new Map();   // originalIndex -> small dataURL for the sidebar
   let draggedThumbOriginalIndex = null;
+
+  // AcroForm fields detected in the loaded PDF (empty array if none/unreadable).
+  // formFieldValues only holds entries for fields the person actually edited —
+  // untouched fields are left alone and export exactly as they already are.
+  let formFieldsMeta = [];
+  let formFieldValues = {};   // fieldName -> string | boolean | string[]
+
+  // Find-in-document: page text is pulled lazily via pdf.js getTextContent()
+  // and cached per original page index (cleared whenever a new PDF loads).
+  const pdfTextCache = new Map(); // originalIndex -> lowercase page text
+  let findResults = [];           // [{ originalIndex, snippet }]
 
   // Drawing/annotation tools: "select" | "pen" | "highlight" | "line" | "arrow" | "rect" | "ellipse"
   let activeTool = "select";
@@ -1578,6 +1955,8 @@
       pageCache.clear();
       pageRotations.clear();
       thumbnailCache.clear();
+      pdfTextCache.clear();
+      findResults = [];
       pageOrder = Array.from({ length: numPages }, (_, i) => i);
       currentPageIndex = 0;
       hasUnsavedChanges = false;
@@ -1591,6 +1970,11 @@
       window.setTimeout(() => setStatus("", "idle"), 1800);
       recentFileBanner.hidden = true; // no longer relevant once a PDF is actually open
       saveLastPdfToDb(file); // best-effort local cache so next visit skips re-uploading
+
+      findBtn.disabled = false;
+      detectFormFields(file); // best-effort — hides the button again if no usable form
+      // (re-reads `file` itself rather than reusing `arrayBuffer` above, since
+      // pdf.js's getDocument() may have already transferred/detached that buffer)
 
       generateAllThumbnails(); // fire-and-forget — sidebar fills in as thumbnails finish
     } catch (err) {
@@ -1641,6 +2025,304 @@
       alert("Could not combine those PDFs: " + err.message);
     }
   }
+
+  // ---------------------------------------------------------------------
+  // Fill PDF Form (AcroForm) — read whatever fillable fields the uploaded
+  // PDF already has, let the person fill them in a modal, and bake the
+  // values into the exported PDF (flattened to static content, matching
+  // how every other edit in this app becomes static page content on save).
+  // ---------------------------------------------------------------------
+  function describeField(field) {
+    const name = field.getName();
+    try {
+      if (field instanceof PDFTextField) {
+        return { name, type: "text", value: field.getText() || "", multiline: field.isMultiline() };
+      }
+      if (field instanceof PDFCheckBox) {
+        return { name, type: "checkbox", value: field.isChecked() };
+      }
+      if (field instanceof PDFRadioGroup) {
+        return { name, type: "radio", options: field.getOptions(), value: field.getSelected() || null };
+      }
+      if (field instanceof PDFDropdown) {
+        const sel = field.getSelected();
+        return { name, type: "dropdown", options: field.getOptions(), value: (sel && sel[0]) || null };
+      }
+      if (field instanceof PDFOptionList) {
+        return { name, type: "optionlist", options: field.getOptions(), value: field.getSelected() || [] };
+      }
+    } catch (err) {
+      console.warn("Could not read form field", name, err);
+    }
+    return { name, type: "unsupported" }; // push buttons, signature fields, etc.
+  }
+
+  async function detectFormFields(file) {
+    formFieldsMeta = [];
+    formFieldValues = {};
+    formFieldsBtn.hidden = true;
+    try {
+      const bytes = await file.arrayBuffer();
+      const doc = await PDFDocument.load(bytes);
+      const form = doc.getForm();
+      const fields = form.getFields().map(describeField).filter((f) => f.type !== "unsupported");
+      formFieldsMeta = fields;
+      formFieldsBtn.hidden = fields.length === 0;
+    } catch (err) {
+      console.warn("No usable AcroForm in this PDF:", err);
+    }
+  }
+
+  function renderFormFieldsModal() {
+    formFieldsList.innerHTML = "";
+    if (formFieldsMeta.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "form-fields-empty";
+      empty.textContent = "This PDF has no fillable form fields.";
+      formFieldsList.appendChild(empty);
+      return;
+    }
+
+    formFieldsMeta.forEach((field) => {
+      const current = Object.prototype.hasOwnProperty.call(formFieldValues, field.name)
+        ? formFieldValues[field.name]
+        : field.value;
+
+      const row = document.createElement("div");
+      row.className = "form-field-row";
+
+      if (field.type === "text") {
+        const label = document.createElement("label");
+        label.className = "form-field-label";
+        label.textContent = field.name;
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = current || "";
+        input.addEventListener("input", () => { formFieldValues[field.name] = input.value; });
+        row.appendChild(label);
+        row.appendChild(input);
+      } else if (field.type === "checkbox") {
+        const checkRow = document.createElement("label");
+        checkRow.className = "form-field-checkbox-row";
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.checked = !!current;
+        input.addEventListener("change", () => { formFieldValues[field.name] = input.checked; });
+        checkRow.appendChild(input);
+        checkRow.appendChild(document.createTextNode(field.name));
+        row.appendChild(checkRow);
+      } else if (field.type === "radio") {
+        const label = document.createElement("span");
+        label.className = "form-field-label";
+        label.textContent = field.name;
+        row.appendChild(label);
+        const group = document.createElement("div");
+        group.className = "form-field-radio-group";
+        (field.options || []).forEach((opt) => {
+          const optRow = document.createElement("label");
+          optRow.className = "form-field-radio-row";
+          const input = document.createElement("input");
+          input.type = "radio";
+          input.name = `radio-${field.name}`;
+          input.checked = current === opt;
+          input.addEventListener("change", () => { if (input.checked) formFieldValues[field.name] = opt; });
+          optRow.appendChild(input);
+          optRow.appendChild(document.createTextNode(opt));
+          group.appendChild(optRow);
+        });
+        row.appendChild(group);
+      } else if (field.type === "dropdown") {
+        const label = document.createElement("label");
+        label.className = "form-field-label";
+        label.textContent = field.name;
+        const select = document.createElement("select");
+        (field.options || []).forEach((opt) => {
+          const optionEl = document.createElement("option");
+          optionEl.value = opt;
+          optionEl.textContent = opt;
+          optionEl.selected = current === opt;
+          select.appendChild(optionEl);
+        });
+        select.addEventListener("change", () => { formFieldValues[field.name] = select.value; });
+        row.appendChild(label);
+        row.appendChild(select);
+      } else if (field.type === "optionlist") {
+        const label = document.createElement("label");
+        label.className = "form-field-label";
+        label.textContent = field.name;
+        const select = document.createElement("select");
+        select.multiple = true;
+        const currentArr = Array.isArray(current) ? current : [];
+        (field.options || []).forEach((opt) => {
+          const optionEl = document.createElement("option");
+          optionEl.value = opt;
+          optionEl.textContent = opt;
+          optionEl.selected = currentArr.includes(opt);
+          select.appendChild(optionEl);
+        });
+        select.addEventListener("change", () => {
+          formFieldValues[field.name] = Array.from(select.selectedOptions).map((o) => o.value);
+        });
+        row.appendChild(label);
+        row.appendChild(select);
+      }
+
+      formFieldsList.appendChild(row);
+    });
+  }
+
+  // Applies collected form field values onto a live pdf-lib form, then
+  // flattens it — draws each field's current appearance into the page's
+  // normal content stream and removes the interactive widgets, so the
+  // filled-in values survive being carried through copyPages() into a
+  // brand-new PDFDocument the same way text/shapes/images already do.
+  function applyFormFieldValues(form) {
+    for (const [name, value] of Object.entries(formFieldValues)) {
+      let field;
+      try {
+        field = form.getField(name);
+      } catch (err) {
+        continue; // field vanished/renamed somehow — skip rather than fail the whole export
+      }
+      try {
+        if (field instanceof PDFTextField) {
+          field.setText(value == null ? "" : String(value));
+        } else if (field instanceof PDFCheckBox) {
+          if (value) field.check(); else field.uncheck();
+        } else if (field instanceof PDFRadioGroup) {
+          if (value) field.select(value);
+        } else if (field instanceof PDFDropdown) {
+          if (value) field.select(value);
+        } else if (field instanceof PDFOptionList) {
+          if (Array.isArray(value) && value.length) field.select(value);
+        }
+      } catch (err) {
+        console.warn("Could not apply value for form field", name, err);
+      }
+    }
+    form.flatten();
+  }
+
+  formFieldsBtn.addEventListener("click", () => {
+    renderFormFieldsModal();
+    formFieldsModal.hidden = false;
+  });
+  closeFormFieldsBtn.addEventListener("click", () => { formFieldsModal.hidden = true; });
+  doneFormFieldsBtn.addEventListener("click", () => { formFieldsModal.hidden = true; });
+  formFieldsModal.addEventListener("click", (e) => {
+    if (e.target === formFieldsModal) formFieldsModal.hidden = true;
+  });
+  resetFormFieldsBtn.addEventListener("click", () => {
+    formFieldValues = {};
+    renderFormFieldsModal();
+  });
+
+  // ---------------------------------------------------------------------
+  // Find text — searches each page's text layer (via pdf.js getTextContent,
+  // independent of the flattened background image the canvas shows) and
+  // lets the person jump to any matching page. No in-page highlight, since
+  // the page itself is a rendered bitmap rather than live text — jumping to
+  // the right page is the useful part.
+  // ---------------------------------------------------------------------
+  async function getPageText(originalIndex) {
+    if (pdfTextCache.has(originalIndex)) return pdfTextCache.get(originalIndex);
+    const page = await pdfProxy.getPage(originalIndex + 1); // pdf.js pages are 1-based
+    const content = await page.getTextContent();
+    const text = content.items.map((item) => item.str).join(" ");
+    pdfTextCache.set(originalIndex, text);
+    return text;
+  }
+
+  let findSearchToken = 0; // guards against a stale slow search overwriting a newer one
+
+  async function runFindSearch(query) {
+    const token = ++findSearchToken;
+    const q = query.trim().toLowerCase();
+    if (!q) {
+      findResults = [];
+      findStatus.textContent = "";
+      renderFindResults();
+      return;
+    }
+    findStatus.textContent = "Searching…";
+    const results = [];
+    for (const originalIndex of pageOrder) {
+      let text;
+      try {
+        text = await getPageText(originalIndex);
+      } catch (err) {
+        console.warn("Could not read text on page", originalIndex + 1, err);
+        continue;
+      }
+      const lower = text.toLowerCase();
+      const idx = lower.indexOf(q);
+      if (idx !== -1) {
+        const start = Math.max(0, idx - 40);
+        const end = Math.min(text.length, idx + q.length + 40);
+        results.push({
+          originalIndex,
+          before: text.slice(start, idx),
+          match: text.slice(idx, idx + q.length),
+          after: text.slice(idx + q.length, end),
+        });
+      }
+    }
+    if (token !== findSearchToken) return; // a newer search has since started
+    findResults = results;
+    findStatus.textContent = results.length
+      ? `${results.length} page${results.length === 1 ? "" : "s"} match`
+      : "No matches";
+    renderFindResults();
+  }
+
+  function renderFindResults() {
+    findResultsList.innerHTML = "";
+    findResults.forEach((result) => {
+      const position = pageOrder.indexOf(result.originalIndex);
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "find-result-item";
+
+      const pageLabel = document.createElement("span");
+      pageLabel.className = "find-result-page";
+      pageLabel.textContent = `Page ${position + 1}`;
+
+      const snippet = document.createElement("span");
+      snippet.className = "find-result-snippet";
+      snippet.appendChild(document.createTextNode("…" + result.before));
+      const mark = document.createElement("mark");
+      mark.textContent = result.match;
+      snippet.appendChild(mark);
+      snippet.appendChild(document.createTextNode(result.after + "…"));
+
+      item.appendChild(pageLabel);
+      item.appendChild(snippet);
+      item.addEventListener("click", () => {
+        if (result.originalIndex !== currentPageIndex) renderPage(result.originalIndex);
+      });
+
+      findResultsList.appendChild(item);
+    });
+  }
+
+  let findDebounceTimer = null;
+  findInput.addEventListener("input", () => {
+    window.clearTimeout(findDebounceTimer);
+    findDebounceTimer = window.setTimeout(() => runFindSearch(findInput.value), 250);
+  });
+
+  findBtn.addEventListener("click", () => {
+    findModal.hidden = false;
+    findInput.value = "";
+    findResults = [];
+    findStatus.textContent = "";
+    renderFindResults();
+    window.setTimeout(() => findInput.focus(), 30);
+  });
+  closeFindBtn.addEventListener("click", () => { findModal.hidden = true; });
+  findModal.addEventListener("click", (e) => {
+    if (e.target === findModal) findModal.hidden = true;
+  });
 
   pdfInput.addEventListener("change", (e) => {
     loadPdfFiles(e.target.files);
@@ -1846,6 +2528,12 @@
     pageOrder = [];
     pageRotations.clear();
     thumbnailCache.clear();
+    pdfTextCache.clear();
+    findResults = [];
+    formFieldsMeta = [];
+    formFieldValues = {};
+    formFieldsBtn.hidden = true;
+    findBtn.disabled = true;
     pageThumbList.innerHTML = "";
     saveBtn.disabled = true;
     mergeBtn.disabled = true;
@@ -1987,6 +2675,21 @@
 
   toggleSidebarBtn.addEventListener("click", () => {
     pageSidebar.classList.toggle("collapsed");
+  });
+
+  // ---------------------------------------------------------------------
+  // Ribbon tabs — purely a show/hide of pre-built panels; every button
+  // inside them keeps the exact same id/enabled-state logic as before, this
+  // just changes which DOM container they physically sit in.
+  // ---------------------------------------------------------------------
+  const ribbonTabButtons = document.querySelectorAll(".ribbon-tab");
+  const ribbonPanelEls = document.querySelectorAll(".ribbon-panel");
+  function setRibbonTab(tabName) {
+    ribbonTabButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.tab === tabName));
+    ribbonPanelEls.forEach((panel) => panel.classList.toggle("active", panel.dataset.tab === tabName));
+  }
+  ribbonTabButtons.forEach((btn) => {
+    btn.addEventListener("click", () => setRibbonTab(btn.dataset.tab));
   });
 
   // ---------------------------------------------------------------------
@@ -2192,6 +2895,13 @@
     if (isStrokeKind && obj.strokeWidth) {
       strokeWidthSlider.value = Math.round(obj.strokeWidth);
     }
+
+    // Align needs 2+ objects selected together (fabric.ActiveSelection);
+    // distribute-spacing only makes sense with 3+.
+    const multiCount = fabricCanvas ? fabricCanvas.getActiveObjects().length : 0;
+    [alignLeftBtn, alignHCenterBtn, alignRightBtn, alignTopBtn, alignVMiddleBtn, alignBottomBtn]
+      .forEach((btn) => { btn.disabled = multiCount < 2; });
+    [distributeHBtn, distributeVBtn].forEach((btn) => { btn.disabled = multiCount < 3; });
   }
 
   function rgbaToHex(color) {
@@ -2776,6 +3486,95 @@
   duplicateBtn.addEventListener("click", duplicateActiveObject);
 
   // ---------------------------------------------------------------------
+  // Align / distribute multiple selected objects. Fabric's ActiveSelection
+  // stores each member's left/top relative to the *group's* center while
+  // it's active, which makes bounding-box math error-prone to do in place.
+  // Sidestepping that entirely: discardActiveObject() snaps every member's
+  // left/top back to plain canvas-absolute coordinates first, so all the
+  // math below happens in one unambiguous coordinate space; a fresh
+  // ActiveSelection is then rebuilt over the same objects afterward so the
+  // multi-selection (and its toolbar state) isn't lost from under the user.
+  // ---------------------------------------------------------------------
+  function withUngroupedSelection(callback) {
+    const active = fabricCanvas ? fabricCanvas.getActiveObject() : null;
+    if (!active || active.type !== "activeSelection") return;
+    const objs = active.getObjects().slice();
+    fabricCanvas.discardActiveObject();
+
+    callback(objs);
+
+    objs.forEach((obj) => obj.setCoords());
+    const restored = new fabric.ActiveSelection(objs, { canvas: fabricCanvas });
+    fabricCanvas.setActiveObject(restored);
+    fabricCanvas.requestRenderAll();
+    onCanvasChanged();
+    updateSelectionButtons();
+  }
+
+  function alignSelection(mode) {
+    withUngroupedSelection((objs) => {
+      if (objs.length < 2) return;
+      const rects = objs.map((obj) => obj.getBoundingRect(true, true));
+      const minLeft = Math.min(...rects.map((r) => r.left));
+      const maxRight = Math.max(...rects.map((r) => r.left + r.width));
+      const minTop = Math.min(...rects.map((r) => r.top));
+      const maxBottom = Math.max(...rects.map((r) => r.top + r.height));
+
+      objs.forEach((obj, i) => {
+        const rect = rects[i];
+        let dx = 0, dy = 0;
+        if (mode === "left") dx = minLeft - rect.left;
+        else if (mode === "hcenter") dx = (minLeft + maxRight) / 2 - (rect.left + rect.width / 2);
+        else if (mode === "right") dx = maxRight - (rect.left + rect.width);
+        else if (mode === "top") dy = minTop - rect.top;
+        else if (mode === "vmiddle") dy = (minTop + maxBottom) / 2 - (rect.top + rect.height / 2);
+        else if (mode === "bottom") dy = maxBottom - (rect.top + rect.height);
+        obj.set({ left: obj.left + dx, top: obj.top + dy });
+      });
+    });
+  }
+
+  function distributeSelection(axis) {
+    withUngroupedSelection((objs) => {
+      if (objs.length < 3) return;
+      const withRects = objs.map((obj) => ({ obj, rect: obj.getBoundingRect(true, true) }));
+      withRects.sort((a, b) => (axis === "horizontal" ? a.rect.left - b.rect.left : a.rect.top - b.rect.top));
+
+      const first = withRects[0].rect;
+      const last = withRects[withRects.length - 1].rect;
+
+      if (axis === "horizontal") {
+        const totalSpan = (last.left + last.width) - first.left;
+        const totalWidth = withRects.reduce((sum, r) => sum + r.rect.width, 0);
+        const gap = (totalSpan - totalWidth) / (withRects.length - 1);
+        let cursor = first.left;
+        withRects.forEach(({ obj, rect }) => {
+          obj.set({ left: obj.left + (cursor - rect.left) });
+          cursor += rect.width + gap;
+        });
+      } else {
+        const totalSpan = (last.top + last.height) - first.top;
+        const totalHeight = withRects.reduce((sum, r) => sum + r.rect.height, 0);
+        const gap = (totalSpan - totalHeight) / (withRects.length - 1);
+        let cursor = first.top;
+        withRects.forEach(({ obj, rect }) => {
+          obj.set({ top: obj.top + (cursor - rect.top) });
+          cursor += rect.height + gap;
+        });
+      }
+    });
+  }
+
+  alignLeftBtn.addEventListener("click", () => alignSelection("left"));
+  alignHCenterBtn.addEventListener("click", () => alignSelection("hcenter"));
+  alignRightBtn.addEventListener("click", () => alignSelection("right"));
+  alignTopBtn.addEventListener("click", () => alignSelection("top"));
+  alignVMiddleBtn.addEventListener("click", () => alignSelection("vmiddle"));
+  alignBottomBtn.addEventListener("click", () => alignSelection("bottom"));
+  distributeHBtn.addEventListener("click", () => distributeSelection("horizontal"));
+  distributeVBtn.addEventListener("click", () => distributeSelection("vertical"));
+
+  // ---------------------------------------------------------------------
   // Add text layer
   // ---------------------------------------------------------------------
   addTextBtn.addEventListener("click", () => {
@@ -2844,8 +3643,17 @@
       closeStampModal();
       return;
     }
+    if (e.key === "Escape" && !formFieldsModal.hidden) {
+      formFieldsModal.hidden = true;
+      return;
+    }
+    if (e.key === "Escape" && !findModal.hidden) {
+      findModal.hidden = true;
+      return;
+    }
     // don't leak shortcuts into the canvas while any modal is open
-    if (!refineModal.hidden || !signatureModal.hidden || !stampModal.hidden) return;
+    if (!refineModal.hidden || !signatureModal.hidden || !stampModal.hidden ||
+        !formFieldsModal.hidden || !findModal.hidden) return;
 
     if (e.key === "Escape" && activeTool !== "select") {
       setActiveTool("select");
@@ -2928,7 +3736,8 @@
 
   document.addEventListener("paste", async (event) => {
     if (!fabricCanvas) return; // no PDF loaded yet, nothing to paste onto
-    if (!refineModal.hidden || !signatureModal.hidden || !stampModal.hidden) return; // don't interfere with an open modal
+    if (!refineModal.hidden || !signatureModal.hidden || !stampModal.hidden ||
+        !formFieldsModal.hidden || !findModal.hidden) return; // don't interfere with an open modal
 
     const items = event.clipboardData?.items;
     if (!items) return;
@@ -3660,6 +4469,22 @@
     // rather than us hand-rolling page removal/reinsertion.
     const pdfBytes = await currentPdfFile.arrayBuffer();
     const srcDoc = await PDFDocument.load(pdfBytes);
+
+    // Bake in any form-field values the person entered (gated on there
+    // actually being changes — leaves untouched documents/exports exactly
+    // as before). Must happen BEFORE copyPages(): a fresh outDoc created via
+    // PDFDocument.create() has no AcroForm of its own, so copyPages() alone
+    // would silently drop any values set only on outDoc's own getForm().
+    // Flattening first draws the filled-in appearance into srcDoc's normal
+    // page content, which copyPages() then carries over like any other mark.
+    if (Object.keys(formFieldValues).length) {
+      try {
+        applyFormFieldValues(srcDoc.getForm());
+      } catch (err) {
+        console.error("Form fill failed, exporting without it:", err);
+      }
+    }
+
     const outDoc = await PDFDocument.create();
 
     // All 12 combos (3 families x regular/bold/italic/bold-italic) are
@@ -3813,6 +4638,13 @@
 
       hasUnsavedChanges = false; // the merged file becomes the new baseline
       await loadPdfFile(mergedFile);
+      // loadPdfFile() always lands back on page 1 — jump straight to the
+      // first newly-added page instead, so the merge is visually obvious
+      // rather than looking identical to a plain re-upload.
+      if (incomingPages.length > 0) {
+        await renderPage(basePages.length);
+        renderSidebar();
+      }
       setStatus(`Merged — ${incomingPages.length} page(s) added`, "success");
       window.setTimeout(() => setStatus("", "idle"), 2400);
     } catch (err) {
@@ -3823,6 +4655,20 @@
       mergeBtn.disabled = false;
     }
   });
+</script>
+
+<script>
+  // Registered outside the module script on purpose — a service worker
+  // registration doesn't need module scope, and keeping it separate means a
+  // failure here (e.g. opened via file://, where SWs aren't allowed at all)
+  // can't ever break the actual editor above.
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch((err) => {
+        console.warn("Service worker registration failed (app still works online):", err);
+      });
+    });
+  }
 </script>
 </body>
 </html>
