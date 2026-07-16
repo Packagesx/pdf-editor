@@ -5687,9 +5687,10 @@
     ] },
   ];
 
-  function renderToolkitGrid(container) {
+  function renderToolkitGrid(container, excludeSections = []) {
     container.innerHTML = "";
     TOOLKIT_SECTIONS.forEach((section) => {
+      if (excludeSections.includes(section.section)) return;
       const sectionEl = document.createElement("div");
       sectionEl.className = "toolkit-section";
       sectionEl.dataset.section = section.section;
@@ -5718,7 +5719,10 @@
   }
 
   renderToolkitGrid(toolkitGrid);
-  renderToolkitGrid(dropzoneToolkitGrid);
+  // No PDF is open yet on this screen, so Undo/Redo would have nothing to
+  // act on — leave "ประวัติ" out of the dropzone preview, still shown in
+  // the full modal (opened via the rail icon, normally mid-edit).
+  renderToolkitGrid(dropzoneToolkitGrid, ["ประวัติ"]);
 
   function filterToolkitCards(query) {
     const q = query.trim().toLowerCase();
