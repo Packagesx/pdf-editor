@@ -3,7 +3,19 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>โปรแกรมนี้สีแดง · โปรแกรมแก้ไข PDF</title>
+<title>Cutout · โปรแกรมแก้ไข PDF</title>
+<script>
+  // Applied synchronously, before any CSS paints, so the page never flashes
+  // the wrong theme on load. Preference persists in localStorage; falls
+  // back to the OS-level light/dark setting the first time a person visits.
+  (function () {
+    try {
+      var stored = localStorage.getItem("cutout-pdf-theme");
+      var theme = stored || (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+      document.documentElement.dataset.theme = theme;
+    } catch (err) { /* localStorage unavailable (private mode etc.) — dark default from CSS stands */ }
+  })();
+</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2349de78'/%3E%3Cpath d='M20 14h16l10 10v26a2 2 0 0 1-2 2H20a2 2 0 0 1-2-2V16a2 2 0 0 1 2-2z' fill='%23041107'/%3E%3Cpath d='M36 14v8a2 2 0 0 0 2 2h8z' fill='%2349de78'/%3E%3Crect x='22' y='38' width='16' height='12' rx='2' fill='none' stroke='%2349de78' stroke-width='2' stroke-dasharray='3 3'/%3E%3C/svg%3E" />
 
 <!-- PWA: installable + works offline after the first visit (see sw.js).
@@ -85,7 +97,32 @@
     --z-canvas: 1;
     --z-hint: 10;
     --z-dragover: 20;
+    --z-rail: 25;
     --z-modal: 100;
+  }
+
+  /* Light theme — same structure, same accent hue, contrast pairs verified
+     with the same methodology as the dark palette above (checked against
+     each other with a WCAG relative-luminance calc, not eyeballed):
+     bg/ink 16.1:1, surface/muted 8.2:1, surface/border-subtle kept in the
+     same ~1.4:1 "subtle divider" range the dark theme itself uses, and
+     border bumped to a real ~3.2:1 to match the dark theme's own border
+     token — light borders disappear far more easily than dark ones do. */
+  html[data-theme="light"] {
+    --bg: oklch(96% 0.006 250);
+    --surface: oklch(99% 0.003 250);
+    --surface-2: oklch(93% 0.008 250);
+    --border-subtle: oklch(88% 0.008 250);
+    --border: oklch(62% 0.025 250);
+    --ink: oklch(20% 0.015 250);
+    --muted: oklch(42% 0.02 250);
+
+    --accent-wash: oklch(80% 0.19 150 / 16%);
+    --accent-wash-strong: oklch(80% 0.19 150 / 28%);
+
+    --danger-wash: oklch(65% 0.19 25 / 10%);
+
+    color-scheme: light;
   }
 
   * { box-sizing: border-box; }
@@ -125,6 +162,7 @@
     height: 30px;
     border-radius: 8px;
     background: var(--accent);
+    box-shadow: 0 2px 10px var(--accent-wash-strong);
     display: grid;
     place-items: center;
     flex-shrink: 0;
@@ -247,6 +285,13 @@
   .icon-btn.danger:hover:not(:disabled) { color: var(--danger); background: var(--danger-wash); }
   .icon-btn.active { background: var(--accent); color: var(--accent-ink); }
   .icon-btn.active:hover:not(:disabled) { background: var(--accent-hover); color: var(--accent-ink); }
+
+  /* Theme toggle: both icons live in the DOM, CSS shows only the one that
+     represents the action (sun = "switch to light" while dark is active,
+     and vice versa) so the icon always describes what a click will do. */
+  #themeToggleBtn .theme-icon-moon { display: none; }
+  html[data-theme="light"] #themeToggleBtn .theme-icon-sun { display: none; }
+  html[data-theme="light"] #themeToggleBtn .theme-icon-moon { display: block; }
 
   #strokeColorInput {
     width: 26px;
@@ -712,6 +757,52 @@
     margin-left: auto;
   }
 
+  /* Pinned-shortcuts rail, right edge of the viewport ------------------ */
+  .icon-rail {
+    position: fixed;
+    top: 50%;
+    right: 16px;
+    transform: translateY(-50%);
+    z-index: var(--z-rail);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 6px;
+    background: var(--surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 14px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  }
+  .icon-rail-divider {
+    width: 20px;
+    height: 1px;
+    background: var(--border-subtle);
+    margin: 2px 0;
+  }
+  .icon-rail-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border: none;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.15s var(--ease), color 0.15s var(--ease), transform 0.15s var(--ease);
+  }
+  .icon-rail-btn svg { width: 17px; height: 17px; }
+  .icon-rail-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); transform: translateX(-1px); }
+  .icon-rail-btn:disabled { color: var(--border); cursor: not-allowed; }
+  @media (max-width: 860px) {
+    /* Narrow viewports: the rail would sit on top of the canvas with no
+       room to spare — fold it away rather than let it overlap content.
+       Every action it offers is still reachable from the ribbon tabs. */
+    .icon-rail { display: none; }
+  }
+
   .ribbon-panels {
     padding: 10px 20px;
     overflow-x: auto;
@@ -771,14 +862,19 @@
     font-size: 11px;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.15s var(--ease), color 0.15s var(--ease);
+    transition: background 0.15s var(--ease), color 0.15s var(--ease), transform 0.15s var(--ease);
   }
-  .ribbon-btn svg { width: 19px; height: 19px; }
+  .ribbon-btn svg { width: 19px; height: 19px; transition: transform 0.15s var(--ease); }
   .ribbon-btn span { white-space: nowrap; }
   .ribbon-btn:hover:not(:disabled) { background: var(--surface-2); }
+  .ribbon-btn:hover:not(:disabled) svg { transform: translateY(-1px); }
+  .ribbon-btn:active:not(:disabled) { transform: scale(0.96); }
   .ribbon-btn:disabled { color: var(--border); cursor: not-allowed; }
   .ribbon-btn.danger:hover:not(:disabled) { color: var(--danger); background: var(--danger-wash); }
   .ribbon-btn.active { background: var(--accent); color: var(--accent-ink); }
+  @media (prefers-reduced-motion: reduce) {
+    .ribbon-btn, .ribbon-btn svg, .ribbon-tab, .icon-rail-btn, .toolkit-card { transition: none !important; }
+  }
 
   /* Compact icon-only ribbon button, for dense rows like Draw tools and
      Align/Distribute where a 60px labeled button per icon would be too wide. */
@@ -1252,6 +1348,48 @@
     text-decoration: line-through;
   }
   .compare-page-same { color: var(--muted); font-size: 13px; }
+
+  /* ---------------------------------------------------------------- */
+  /* Toolkit browser: every tool as one searchable, grouped card grid    */
+  /* ---------------------------------------------------------------- */
+  .toolkit-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    max-height: 56vh;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+  .toolkit-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .toolkit-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px;
+  }
+  .toolkit-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 9px;
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-2);
+    color: var(--ink);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s var(--ease), background 0.15s var(--ease), transform 0.15s var(--ease);
+  }
+  .toolkit-card svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--accent); }
+  .toolkit-card-title { font-size: 13px; font-weight: 600; line-height: 1.3; }
+  .toolkit-card:hover:not(:disabled) { border-color: var(--accent); transform: translateY(-1px); }
+  .toolkit-card:disabled { opacity: 0.45; cursor: not-allowed; }
+  .toolkit-card:disabled:hover { transform: none; border-color: var(--border-subtle); }
+  .toolkit-card.toolkit-hidden { display: none; }
+  .toolkit-section.toolkit-hidden { display: none; }
 </style>
 </head>
 <body>
@@ -1262,7 +1400,7 @@
       <span class="brand-mark">
         <svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" fill="#041107"/><rect x="8" y="14" width="7" height="5" rx="1" stroke="#49de78" stroke-width="1.4" stroke-dasharray="2 2" fill="none"/></svg>
       </span>
-      <span class="brand-name">โปรแกรมนี้สีแดง <span class="dim">· โปรแกรมแก้ไข PDF</span></span>
+      <span class="brand-name">Cutout <span class="dim">· โปรแกรมแก้ไข PDF</span></span>
     </div>
 
     <nav class="ribbon-tabs" id="ribbonTabs">
@@ -1276,6 +1414,10 @@
 
     <div class="header-right">
       <span id="statusPill" class="status-pill"></span>
+      <button class="icon-btn" id="themeToggleBtn" title="สลับธีมสว่าง/มืด" type="button">
+        <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.5M12 19v2.5M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2.5 12H5M19 12h2.5M4.2 19.8L6 18M18 6l1.8-1.8"/></svg>
+        <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/></svg>
+      </button>
       <button class="btn" id="saveBtn" disabled>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
         บันทึกและส่งออก
@@ -1517,6 +1659,27 @@
     </div>
   </div>
 </header>
+
+<!-- Slim pinned-shortcuts rail along the right edge — quick access to the
+     tools people reach for most, without switching ribbon tabs. Mirrors the
+     ribbon's own disabled-until-a-PDF-is-loaded behavior by simply calling
+     .click() on the real ribbon button: a disabled button never dispatches
+     a click, so these shortcuts can't act ahead of the ribbon anyway. -->
+<aside class="icon-rail" aria-label="ทางลัด">
+  <button class="icon-rail-btn" id="railToolkitBtn" title="เครื่องมือทั้งหมด" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+  </button>
+  <span class="icon-rail-divider"></span>
+  <button class="icon-rail-btn" id="railFindBtn" title="ค้นหาข้อความ" type="button" disabled>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+  </button>
+  <button class="icon-rail-btn" id="railStampBtn" title="รูปที่บันทึกไว้" type="button" disabled>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="13" height="13" rx="2"/><path d="M8 21h10a2 2 0 0 0 2-2V9"/><circle cx="7.5" cy="7.5" r="1.5"/><path d="M3 13l3-3 5 5"/></svg>
+  </button>
+  <button class="icon-rail-btn" id="railSidebarBtn" title="เปิด/ปิดแผงหน้าเอกสาร" type="button" disabled>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+  </button>
+</aside>
 
 <main>
   <!-- Empty state: drag-and-drop zone -->
@@ -1852,6 +2015,141 @@
   </div>
 </div>
 
+<!-- Toolkit browser: every tool in the app as one searchable grid, grouped
+     the same way the ribbon groups them. Each card either clicks the real
+     ribbon button behind it (reusing all existing wiring/disabled-state
+     logic verbatim) or, for groups that are a cluster of controls rather
+     than a single action, switches to that ribbon tab. -->
+<div id="toolkitModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="เครื่องมือทั้งหมด" hidden>
+  <div class="modal-panel modal-panel--wide">
+    <div class="modal-header">
+      <h3>เครื่องมือทั้งหมด</h3>
+      <button class="icon-btn" id="closeToolkitBtn" title="ปิด" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="refine-body">
+      <input type="text" id="toolkitSearchInput" class="sig-text-input" placeholder="ค้นหาเครื่องมือ…" autocomplete="off" style="margin-bottom:0;" />
+      <div id="toolkitGrid" class="toolkit-grid">
+        <div class="toolkit-section" data-section="ประวัติ">
+          <span class="ribbon-group-caption">ประวัติ</span>
+          <div class="toolkit-cards">
+            <button class="toolkit-card" type="button" data-btn="undoBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              <span class="toolkit-card-title">เลิกทำ</span>
+            </button>
+            <button class="toolkit-card" type="button" data-btn="redoBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              <span class="toolkit-card-title">ทำซ้ำ</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="toolkit-section" data-section="ไฟล์">
+          <span class="ribbon-group-caption">ไฟล์</span>
+          <div class="toolkit-cards">
+            <button class="toolkit-card" type="button" data-btn="pdfInput">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M7 9l5-5 5 5"/><path d="M12 4v12"/></svg>
+              <span class="toolkit-card-title">อัปโหลด PDF</span>
+            </button>
+            <button class="toolkit-card" type="button" data-btn="mergeBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="12" height="15" rx="2"/><path d="M9 12h9M18 12l-3-3M18 12l-3 3"/></svg>
+              <span class="toolkit-card-title">รวมไฟล์ PDF</span>
+            </button>
+            <button class="toolkit-card" type="button" data-btn="startOverBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/></svg>
+              <span class="toolkit-card-title">เริ่มใหม่</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="toolkit-section" data-section="ค้นหา">
+          <span class="ribbon-group-caption">ค้นหา</span>
+          <div class="toolkit-cards">
+            <button class="toolkit-card" type="button" data-btn="findBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <span class="toolkit-card-title">ค้นหาข้อความ</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="toolkit-section" data-section="เนื้อหา">
+          <span class="ribbon-group-caption">เนื้อหา</span>
+          <div class="toolkit-cards">
+            <button class="toolkit-card" type="button" data-btn="addTextBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+              <span class="toolkit-card-title">เพิ่มข้อความ</span>
+            </button>
+            <button class="toolkit-card" type="button" data-btn="uploadImageBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+              <span class="toolkit-card-title">เพิ่มรูปภาพ</span>
+            </button>
+            <button class="toolkit-card" type="button" data-btn="duplicateBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span class="toolkit-card-title">ทำสำเนา</span>
+            </button>
+            <button class="toolkit-card" type="button" data-btn="refineBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.06 11.9l8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></svg>
+              <span class="toolkit-card-title">ปรับขอบภาพ</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="toolkit-section" data-section="จัดเรียงและวาด">
+          <span class="ribbon-group-caption">จัดเรียงและวาด</span>
+          <div class="toolkit-cards">
+            <button class="toolkit-card" type="button" data-tab="edit">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="3" x2="12" y2="21"/><rect x="6" y="6" width="12" height="4"/><rect x="8.5" y="14" width="7" height="4"/></svg>
+              <span class="toolkit-card-title">จัดเรียงวัตถุ</span>
+            </button>
+            <button class="toolkit-card" type="button" data-tab="draw">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+              <span class="toolkit-card-title">เครื่องมือวาด/รูปทรง</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="toolkit-section" data-section="ฟอร์มและลายเซ็น">
+          <span class="ribbon-group-caption">ฟอร์มและลายเซ็น</span>
+          <div class="toolkit-cards">
+            <button class="toolkit-card" type="button" data-btn="formFieldsBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="13" y2="13"/></svg>
+              <span class="toolkit-card-title">กรอกฟอร์ม</span>
+            </button>
+            <button class="toolkit-card" type="button" data-btn="signatureBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c2-4 4 4 6 0s3-8 5-4 3 6 5 2"/><path d="M3 21h18"/></svg>
+              <span class="toolkit-card-title">ลายเซ็น</span>
+            </button>
+            <button class="toolkit-card" type="button" data-btn="stampBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="13" height="13" rx="2"/><path d="M8 21h10a2 2 0 0 0 2-2V9"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+              <span class="toolkit-card-title">รูปที่บันทึกไว้</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="toolkit-section" data-section="เครื่องมือ">
+          <span class="ribbon-group-caption">รหัสผ่าน · OCR · เปรียบเทียบ</span>
+          <div class="toolkit-cards">
+            <button class="toolkit-card" type="button" data-btn="protectBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <span class="toolkit-card-title">ใส่รหัสผ่าน</span>
+            </button>
+            <button class="toolkit-card" type="button" data-btn="ocrBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="7" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="14" y2="12"/><line x1="7" y1="16" x2="11" y2="16"/></svg>
+              <span class="toolkit-card-title">OCR ข้อความค้นหาได้</span>
+            </button>
+            <button class="toolkit-card" type="button" data-btn="compareBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="9" height="16" rx="1.5"/><rect x="13" y="4" width="9" height="16" rx="1.5"/></svg>
+              <span class="toolkit-card-title">เปรียบเทียบ PDF</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <p id="toolkitEmpty" class="find-status" hidden>ไม่พบเครื่องมือที่ตรงกับคำค้นหา</p>
+    </div>
+  </div>
+</div>
+
 <script type="module">
   // ---------------------------------------------------------------------
   // Client-side-only library imports (no build step / bundler required).
@@ -2005,6 +2303,18 @@
   const compareResultsPane = document.getElementById("compareResultsPane");
   const compareSummary = document.getElementById("compareSummary");
   const compareResultsList = document.getElementById("compareResultsList");
+
+  // ---- Theme toggle, icon rail, toolkit browser -----------------------
+  const themeToggleBtn = document.getElementById("themeToggleBtn");
+  const railToolkitBtn = document.getElementById("railToolkitBtn");
+  const railFindBtn = document.getElementById("railFindBtn");
+  const railStampBtn = document.getElementById("railStampBtn");
+  const railSidebarBtn = document.getElementById("railSidebarBtn");
+  const toolkitModal = document.getElementById("toolkitModal");
+  const closeToolkitBtn = document.getElementById("closeToolkitBtn");
+  const toolkitSearchInput = document.getElementById("toolkitSearchInput");
+  const toolkitGrid = document.getElementById("toolkitGrid");
+  const toolkitEmpty = document.getElementById("toolkitEmpty");
 
   const alignLeftBtn = document.getElementById("alignLeftBtn");
   const alignHCenterBtn = document.getElementById("alignHCenterBtn");
@@ -2247,6 +2557,9 @@
       protectBtn.disabled = false;
       ocrBtn.disabled = false;
       compareBtn.disabled = false;
+      railFindBtn.disabled = false;
+      railStampBtn.disabled = false;
+      railSidebarBtn.disabled = false;
       detectFormFields(file); // best-effort — hides the button again if no usable form
       // (re-reads `file` itself rather than reusing `arrayBuffer` above, since
       // pdf.js's getDocument() may have already transferred/detached that buffer)
@@ -2812,6 +3125,9 @@
     protectBtn.disabled = true;
     ocrBtn.disabled = true;
     compareBtn.disabled = true;
+    railFindBtn.disabled = true;
+    railStampBtn.disabled = true;
+    railSidebarBtn.disabled = true;
     pageThumbList.innerHTML = "";
     saveBtn.disabled = true;
     mergeBtn.disabled = true;
@@ -3941,10 +4257,14 @@
       compareModal.hidden = true;
       return;
     }
+    if (e.key === "Escape" && !toolkitModal.hidden) {
+      toolkitModal.hidden = true;
+      return;
+    }
     // don't leak shortcuts into the canvas while any modal is open
     if (!refineModal.hidden || !signatureModal.hidden || !stampModal.hidden ||
         !formFieldsModal.hidden || !findModal.hidden || !passwordModal.hidden ||
-        !ocrModal.hidden || !compareModal.hidden) return;
+        !ocrModal.hidden || !compareModal.hidden || !toolkitModal.hidden) return;
 
     if (e.key === "Escape" && activeTool !== "select") {
       setActiveTool("select");
@@ -4029,7 +4349,7 @@
     if (!fabricCanvas) return; // no PDF loaded yet, nothing to paste onto
     if (!refineModal.hidden || !signatureModal.hidden || !stampModal.hidden ||
         !formFieldsModal.hidden || !findModal.hidden || !passwordModal.hidden ||
-        !ocrModal.hidden || !compareModal.hidden) return; // don't interfere with an open modal
+        !ocrModal.hidden || !compareModal.hidden || !toolkitModal.hidden) return; // don't interfere with an open modal
 
     const items = event.clipboardData?.items;
     if (!items) return;
@@ -5300,6 +5620,65 @@
     } finally {
       startCompareBtn.disabled = false;
     }
+  });
+
+  // ---------------------------------------------------------------------
+  // Theme toggle: swaps html[data-theme], persisted to localStorage. The
+  // actual token values live in CSS ([data-theme="light"] in <style>); the
+  // matching pre-paint flip in <head> is what prevents a flash on reload.
+  // ---------------------------------------------------------------------
+  themeToggleBtn.addEventListener("click", () => {
+    const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("cutout-pdf-theme", next); } catch (err) { /* private mode etc. */ }
+  });
+
+  // ---------------------------------------------------------------------
+  // Right-edge icon rail: pinned shortcuts that just defer to the real
+  // ribbon buttons/status-bar controls, so disabled state and behavior
+  // can never drift out of sync with the ribbon itself.
+  // ---------------------------------------------------------------------
+  railToolkitBtn.addEventListener("click", () => { toolkitModal.hidden = false; toolkitSearchInput.value = ""; filterToolkitCards(""); toolkitSearchInput.focus(); });
+  railFindBtn.addEventListener("click", () => findBtn.click());
+  railStampBtn.addEventListener("click", () => stampBtn.click());
+  railSidebarBtn.addEventListener("click", () => toggleSidebarBtn.click());
+
+  // ---------------------------------------------------------------------
+  // Toolkit browser: a searchable grid of every tool in the app, grouped
+  // like the ribbon. Cards delegate to the real button/tab behind them
+  // rather than duplicating any logic.
+  // ---------------------------------------------------------------------
+  function filterToolkitCards(query) {
+    const q = query.trim().toLowerCase();
+    let anyVisible = false;
+    toolkitGrid.querySelectorAll(".toolkit-section").forEach((section) => {
+      let sectionHasMatch = false;
+      section.querySelectorAll(".toolkit-card").forEach((card) => {
+        const title = card.querySelector(".toolkit-card-title").textContent.toLowerCase();
+        const match = !q || title.includes(q) || (section.dataset.section || "").toLowerCase().includes(q);
+        card.classList.toggle("toolkit-hidden", !match);
+        if (match) sectionHasMatch = true;
+      });
+      section.classList.toggle("toolkit-hidden", !sectionHasMatch);
+      if (sectionHasMatch) anyVisible = true;
+    });
+    toolkitEmpty.hidden = anyVisible;
+  }
+
+  closeToolkitBtn.addEventListener("click", () => { toolkitModal.hidden = true; });
+  toolkitModal.addEventListener("click", (e) => { if (e.target === toolkitModal) toolkitModal.hidden = true; });
+  toolkitSearchInput.addEventListener("input", () => filterToolkitCards(toolkitSearchInput.value));
+
+  toolkitGrid.addEventListener("click", (e) => {
+    const card = e.target.closest(".toolkit-card");
+    if (!card) return;
+    if (card.dataset.btn) {
+      const target = document.getElementById(card.dataset.btn);
+      if (target) target.click(); // no-ops naturally if the real button is disabled
+    } else if (card.dataset.tab) {
+      setRibbonTab(card.dataset.tab);
+    }
+    toolkitModal.hidden = true;
   });
 </script>
 
