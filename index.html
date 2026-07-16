@@ -965,6 +965,12 @@
   </label>
   <input type="file" id="pdfInput" accept="application/pdf" />
 
+  <button class="btn secondary" id="mergeBtn" title="Add another PDF's pages to the end of this one" type="button" disabled>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="12" height="15" rx="2"/><path d="M9 12h9M18 12l-3-3M18 12l-3 3"/></svg>
+    Merge PDF
+  </button>
+  <input type="file" id="mergeInput" accept="application/pdf" hidden />
+
   <button class="btn" id="saveBtn" disabled>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
     Save &amp; Export
@@ -1290,6 +1296,8 @@
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
   const pdfInput = document.getElementById("pdfInput");
+  const mergeBtn = document.getElementById("mergeBtn");
+  const mergeInput = document.getElementById("mergeInput");
   const saveBtn = document.getElementById("saveBtn");
   const statusPill = document.getElementById("statusPill");
   const dropzone = document.getElementById("dropzone");
@@ -1800,6 +1808,7 @@
     thumbnailCache.clear();
     pageThumbList.innerHTML = "";
     saveBtn.disabled = true;
+    mergeBtn.disabled = true;
     hasUnsavedChanges = false;
     setStatus("", "idle");
     if (fabricCanvas) {
@@ -1908,6 +1917,7 @@
     resetZoom();
     addTextBtn.disabled = false;
     uploadImageBtn.disabled = false;
+    mergeBtn.disabled = false;
     [selectToolBtn, penToolBtn, highlightToolBtn, lineToolBtn, arrowToolBtn, rectToolBtn, ellipseToolBtn, redactToolBtn,
       strokeColorInput, strokeWidthSlider, signatureBtn, stampBtn,
       textFontSelect, textBoldBtn, textItalicBtn, textColorInput].forEach((el) => { el.disabled = false; });
@@ -2009,6 +2019,16 @@
         rotatePage(originalIndex);
       });
 
+      const exportThumbBtn = document.createElement("button");
+      exportThumbBtn.type = "button";
+      exportThumbBtn.className = "icon-btn";
+      exportThumbBtn.title = "Export this page as its own PDF";
+      exportThumbBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>';
+      exportThumbBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        exportSinglePage(originalIndex);
+      });
+
       const deleteThumbBtn = document.createElement("button");
       deleteThumbBtn.type = "button";
       deleteThumbBtn.className = "icon-btn danger";
@@ -2021,6 +2041,7 @@
       });
 
       actions.appendChild(rotateBtn);
+      actions.appendChild(exportThumbBtn);
       actions.appendChild(deleteThumbBtn);
 
       item.appendChild(imageWrap);
@@ -2852,6 +2873,11 @@
     if (!fabricCanvas) return;
     imageInput.click();
   });
+
+  mergeBtn.addEventListener("click", () => {
+    if (!currentPdfFile) return;
+    mergeInput.click();
+  });
   imageInput.addEventListener("change", async (e) => {
     const file = e.target.files[0];
     imageInput.value = ""; // allow picking the same file again later
@@ -3577,6 +3603,93 @@
     });
   }
 
+  // Builds the fully-edited output PDF as raw bytes, for whichever subset
+  // of (original-index) pages the caller wants — the normal Save & Export
+  // button passes the whole pageOrder, while single-page export and the
+  // merge feature below reuse this same pipeline with a narrower list.
+  // Pulled out of the click handler so those features can't drift out of
+  // sync with what Save & Export actually produces.
+  async function buildEditedPdfBytes(pageIndicesInOrder) {
+    if (fabricCanvas && pageCache.has(currentPageIndex)) {
+      pageCache.get(currentPageIndex).layers = serializeCurrentLayers();
+    }
+
+    // Rebuild the output from scratch via copyPages(): this is what lets
+    // deleted pages simply not appear and reordered pages come out in
+    // their new sequence, in one step, using pdf-lib's own copy machinery
+    // rather than us hand-rolling page removal/reinsertion.
+    const pdfBytes = await currentPdfFile.arrayBuffer();
+    const srcDoc = await PDFDocument.load(pdfBytes);
+    const outDoc = await PDFDocument.create();
+
+    // All 12 combos (3 families x regular/bold/italic/bold-italic) are
+    // standard PDF fonts — embedding is metadata-only (no network fetch,
+    // no font-file bytes), so embedding the full set up front is cheap
+    // and avoids conditional per-layer embedding logic.
+    const fontsByFamily = {};
+    for (const key of Object.keys(TEXT_FONTS)) {
+      const spec = TEXT_FONTS[key];
+      fontsByFamily[key] = {
+        regular: await outDoc.embedFont(spec.regular),
+        bold: await outDoc.embedFont(spec.bold),
+        italic: await outDoc.embedFont(spec.italic),
+        boldItalic: await outDoc.embedFont(spec.boldItalic),
+      };
+    }
+
+    const copiedPages = await outDoc.copyPages(srcDoc, pageIndicesInOrder);
+    for (let i = 0; i < copiedPages.length; i++) {
+      const page = copiedPages[i];
+      outDoc.addPage(page);
+      const originalIndex = pageIndicesInOrder[i];
+
+      const rotationDelta = pageRotations.get(originalIndex) || 0;
+      if (rotationDelta) {
+        const baseAngle = page.getRotation().angle;
+        page.setRotation(degrees((baseAngle + rotationDelta) % 360));
+      }
+
+      const state = pageCache.get(originalIndex);
+      if (!state || !state.layers.length) continue;
+      const isLivePage = originalIndex === currentPageIndex && !!fabricCanvas;
+      const liveObjects = isLivePage ? fabricCanvas.getObjects() : null;
+
+      for (let j = 0; j < state.layers.length; j++) {
+        const layer = state.layers[j];
+        const centerCanvas = isLivePage && liveObjects[j]
+          ? liveObjects[j].getCenterPoint()
+          : computeCanvasCenterFromLayer(layer);
+
+        if (layer.kind === "text") {
+          embedTextLayer(page, layer, state.canvasWidth, state.canvasHeight, centerCanvas, fontsByFamily);
+        } else if (layer.kind === "rect") {
+          embedRectLayer(page, layer, state.canvasWidth, state.canvasHeight, centerCanvas);
+        } else if (layer.kind === "ellipse") {
+          embedEllipseLayer(page, layer, state.canvasWidth, state.canvasHeight, centerCanvas);
+        } else if (layer.kind === "path") {
+          const liveObj = isLivePage && liveObjects[j] ? liveObjects[j] : null;
+          embedPathLayer(page, layer, state.canvasWidth, state.canvasHeight, liveObj);
+        } else {
+          await embedImageLayer(outDoc, page, layer, state.canvasWidth, state.canvasHeight, centerCanvas);
+        }
+      }
+    }
+
+    return outDoc.save();
+  }
+
+  function downloadPdfBytes(bytes, filename) {
+    const pdfBlob = new Blob([bytes], { type: "application/pdf" });
+    const downloadUrl = URL.createObjectURL(pdfBlob);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(downloadUrl);
+  }
+
   saveBtn.addEventListener("click", async () => {
     if (!currentPdfFile) {
       alert("Upload a PDF first.");
@@ -3587,82 +3700,9 @@
     saveBtn.disabled = true;
 
     try {
-      if (fabricCanvas && pageCache.has(currentPageIndex)) {
-        pageCache.get(currentPageIndex).layers = serializeCurrentLayers();
-      }
-
-      // Rebuild the output from scratch via copyPages(pageOrder): this is
-      // what lets deleted pages simply not appear and reordered pages come
-      // out in their new sequence, in one step, using pdf-lib's own copy
-      // machinery rather than us hand-rolling page removal/reinsertion.
-      const pdfBytes = await currentPdfFile.arrayBuffer();
-      const srcDoc = await PDFDocument.load(pdfBytes);
-      const outDoc = await PDFDocument.create();
-
-      // All 12 combos (3 families x regular/bold/italic/bold-italic) are
-      // standard PDF fonts — embedding is metadata-only (no network fetch,
-      // no font-file bytes), so embedding the full set up front is cheap
-      // and avoids conditional per-layer embedding logic.
-      const fontsByFamily = {};
-      for (const key of Object.keys(TEXT_FONTS)) {
-        const spec = TEXT_FONTS[key];
-        fontsByFamily[key] = {
-          regular: await outDoc.embedFont(spec.regular),
-          bold: await outDoc.embedFont(spec.bold),
-          italic: await outDoc.embedFont(spec.italic),
-          boldItalic: await outDoc.embedFont(spec.boldItalic),
-        };
-      }
-
-      const copiedPages = await outDoc.copyPages(srcDoc, pageOrder);
-      for (let i = 0; i < copiedPages.length; i++) {
-        const page = copiedPages[i];
-        outDoc.addPage(page);
-        const originalIndex = pageOrder[i];
-
-        const rotationDelta = pageRotations.get(originalIndex) || 0;
-        if (rotationDelta) {
-          const baseAngle = page.getRotation().angle;
-          page.setRotation(degrees((baseAngle + rotationDelta) % 360));
-        }
-
-        const state = pageCache.get(originalIndex);
-        if (!state || !state.layers.length) continue;
-        const isLivePage = originalIndex === currentPageIndex && !!fabricCanvas;
-        const liveObjects = isLivePage ? fabricCanvas.getObjects() : null;
-
-        for (let j = 0; j < state.layers.length; j++) {
-          const layer = state.layers[j];
-          const centerCanvas = isLivePage && liveObjects[j]
-            ? liveObjects[j].getCenterPoint()
-            : computeCanvasCenterFromLayer(layer);
-
-          if (layer.kind === "text") {
-            embedTextLayer(page, layer, state.canvasWidth, state.canvasHeight, centerCanvas, fontsByFamily);
-          } else if (layer.kind === "rect") {
-            embedRectLayer(page, layer, state.canvasWidth, state.canvasHeight, centerCanvas);
-          } else if (layer.kind === "ellipse") {
-            embedEllipseLayer(page, layer, state.canvasWidth, state.canvasHeight, centerCanvas);
-          } else if (layer.kind === "path") {
-            const liveObj = isLivePage && liveObjects[j] ? liveObjects[j] : null;
-            embedPathLayer(page, layer, state.canvasWidth, state.canvasHeight, liveObj);
-          } else {
-            await embedImageLayer(outDoc, page, layer, state.canvasWidth, state.canvasHeight, centerCanvas);
-          }
-        }
-      }
-
-      const outBytes = await outDoc.save();
-      const pdfBlob = new Blob([outBytes], { type: "application/pdf" });
-      const downloadUrl = URL.createObjectURL(pdfBlob);
+      const outBytes = await buildEditedPdfBytes(pageOrder);
       const baseName = currentPdfFile.name.replace(/\.pdf$/i, "");
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = `${baseName}-edited.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(downloadUrl);
+      downloadPdfBytes(outBytes, `${baseName}-edited.pdf`);
 
       hasUnsavedChanges = false;
       setStatus("Saved — download started", "success");
@@ -3673,6 +3713,74 @@
       alert("Failed to save PDF: " + err.message);
     } finally {
       updateSaveButtonState();
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // Export a single page (with its current edits) as its own PDF — the
+  // "split" half of merge/split. Wired to a per-thumbnail button in the
+  // sidebar, added alongside rotate/delete in renderSidebar().
+  // ---------------------------------------------------------------------
+  async function exportSinglePage(originalIndex) {
+    if (!currentPdfFile) return;
+    setStatus("Exporting page…", "loading");
+    try {
+      const outBytes = await buildEditedPdfBytes([originalIndex]);
+      const baseName = currentPdfFile.name.replace(/\.pdf$/i, "");
+      const position = pageOrder.indexOf(originalIndex);
+      downloadPdfBytes(outBytes, `${baseName}-page${position + 1}.pdf`);
+      setStatus("Page exported", "success");
+      window.setTimeout(() => setStatus("", "idle"), 1800);
+    } catch (err) {
+      console.error(err);
+      setStatus("Export failed", "error");
+      alert("Failed to export this page: " + err.message);
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Merge another PDF's pages into this document. The CURRENT document's
+  // in-progress edits are baked in first (via the same buildEditedPdfBytes
+  // used by Save & Export), then combined with the incoming file's pages,
+  // and the result is loaded as the new working document — reusing the
+  // entire single-document pipeline instead of teaching pageCache/pdf.js
+  // to juggle two source PDFs at once.
+  // ---------------------------------------------------------------------
+  mergeInput.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    mergeInput.value = ""; // allow picking the same file again later
+    if (!file || file.type !== "application/pdf") return;
+    if (!currentPdfFile) return;
+
+    setStatus("Merging PDFs…", "loading");
+    mergeBtn.disabled = true;
+    try {
+      const editedBytes = await buildEditedPdfBytes(pageOrder);
+      const incomingBytes = await file.arrayBuffer();
+
+      const baseDoc = await PDFDocument.load(editedBytes);
+      const incomingDoc = await PDFDocument.load(incomingBytes);
+      const combinedDoc = await PDFDocument.create();
+
+      const basePages = await combinedDoc.copyPages(baseDoc, baseDoc.getPageIndices());
+      basePages.forEach((p) => combinedDoc.addPage(p));
+      const incomingPages = await combinedDoc.copyPages(incomingDoc, incomingDoc.getPageIndices());
+      incomingPages.forEach((p) => combinedDoc.addPage(p));
+
+      const combinedBytes = await combinedDoc.save();
+      const baseName = currentPdfFile.name.replace(/\.pdf$/i, "");
+      const mergedFile = new File([combinedBytes], `${baseName}-merged.pdf`, { type: "application/pdf" });
+
+      hasUnsavedChanges = false; // the merged file becomes the new baseline
+      await loadPdfFile(mergedFile);
+      setStatus(`Merged — ${incomingPages.length} page(s) added`, "success");
+      window.setTimeout(() => setStatus("", "idle"), 2400);
+    } catch (err) {
+      console.error(err);
+      setStatus("Merge failed", "error");
+      alert("Failed to merge that PDF: " + err.message);
+    } finally {
+      mergeBtn.disabled = false;
     }
   });
 </script>
