@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="th">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Cutout · PDF Background Remover</title>
+<title>Cutout · โปรแกรมแก้ไข PDF</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2349de78'/%3E%3Cpath d='M20 14h16l10 10v26a2 2 0 0 1-2 2H20a2 2 0 0 1-2-2V16a2 2 0 0 1 2-2z' fill='%23041107'/%3E%3Cpath d='M36 14v8a2 2 0 0 0 2 2h8z' fill='%2349de78'/%3E%3Crect x='22' y='38' width='16' height='12' rx='2' fill='none' stroke='%2349de78' stroke-width='2' stroke-dasharray='3 3'/%3E%3C/svg%3E" />
 
 <!-- PWA: installable + works offline after the first visit (see sw.js).
@@ -53,7 +53,7 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Caveat:wght@500;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700;800&family=Caveat:wght@500;700&display=swap" rel="stylesheet" />
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
@@ -94,7 +94,7 @@
 
   body {
     margin: 0;
-    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: "Noto Sans Thai", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background: var(--bg);
     color: var(--ink);
     -webkit-font-smoothing: antialiased;
@@ -1158,6 +1158,100 @@
     border-radius: 2px;
     padding: 0 1px;
   }
+
+  /* ---------------------------------------------------------------- */
+  /* Tools tab: password/encryption, OCR, compare modals                */
+  /* ---------------------------------------------------------------- */
+  .field-label {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--muted);
+    margin: -8px 0 -8px;
+  }
+  .permission-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+  }
+  .permission-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13.5px;
+    cursor: pointer;
+  }
+  .modal-panel--wide { max-width: 820px; }
+  #ocrProgressWrap { display: flex; flex-direction: column; gap: 6px; }
+  #ocrProgressWrap .progress-track {
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--border-subtle);
+    overflow: hidden;
+  }
+  #ocrProgressWrap .progress-fill {
+    display: block;
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+    border-radius: inherit;
+    transition: width 0.25s var(--ease);
+  }
+  .compare-summary {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+  }
+  .compare-results-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+  .compare-page-block {
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: var(--surface-2);
+  }
+  .compare-page-title {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-bottom: 6px;
+  }
+  .compare-page-text {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--muted);
+    word-break: break-word;
+  }
+  .compare-page-text .diff-added {
+    background: oklch(65% 0.16 145 / 25%);
+    color: var(--ink);
+    border-radius: 2px;
+    padding: 0 1px;
+    text-decoration: none;
+  }
+  .compare-page-text .diff-removed {
+    background: oklch(60% 0.18 25 / 25%);
+    color: var(--muted);
+    border-radius: 2px;
+    padding: 0 1px;
+    text-decoration: line-through;
+  }
+  .compare-page-same { color: var(--muted); font-size: 13px; }
 </style>
 </head>
 <body>
@@ -1168,22 +1262,23 @@
       <span class="brand-mark">
         <svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" fill="#041107"/><rect x="8" y="14" width="7" height="5" rx="1" stroke="#49de78" stroke-width="1.4" stroke-dasharray="2 2" fill="none"/></svg>
       </span>
-      <span class="brand-name">Cutout <span class="dim">· PDF editor</span></span>
+      <span class="brand-name">Cutout <span class="dim">· โปรแกรมแก้ไข PDF</span></span>
     </div>
 
     <nav class="ribbon-tabs" id="ribbonTabs">
-      <button class="ribbon-tab active" data-tab="home" type="button">Home</button>
-      <button class="ribbon-tab" data-tab="edit" type="button">Edit</button>
-      <button class="ribbon-tab" data-tab="draw" type="button">Draw</button>
-      <button class="ribbon-tab" data-tab="form" type="button">Form</button>
-      <button class="ribbon-tab" data-tab="sign" type="button">Sign</button>
+      <button class="ribbon-tab active" data-tab="home" type="button">หน้าหลัก</button>
+      <button class="ribbon-tab" data-tab="edit" type="button">แก้ไข</button>
+      <button class="ribbon-tab" data-tab="draw" type="button">วาด</button>
+      <button class="ribbon-tab" data-tab="form" type="button">ฟอร์ม</button>
+      <button class="ribbon-tab" data-tab="sign" type="button">ลายเซ็น</button>
+      <button class="ribbon-tab" data-tab="tools" type="button">เครื่องมือ</button>
     </nav>
 
     <div class="header-right">
       <span id="statusPill" class="status-pill"></span>
       <button class="btn" id="saveBtn" disabled>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-        Save &amp; Export
+        บันทึกและส่งออก
       </button>
     </div>
   </div>
@@ -1192,16 +1287,16 @@
     <div class="ribbon-panel active" data-tab="home">
       <div class="ribbon-group">
         <div class="ribbon-group-buttons">
-          <button class="ribbon-btn" id="undoBtn" title="Undo (Ctrl+Z)" type="button" disabled>
+          <button class="ribbon-btn" id="undoBtn" title="เลิกทำ (Ctrl+Z)" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-            <span>Undo</span>
+            <span>เลิกทำ</span>
           </button>
-          <button class="ribbon-btn" id="redoBtn" title="Redo (Ctrl+Shift+Z)" type="button" disabled>
+          <button class="ribbon-btn" id="redoBtn" title="ทำซ้ำ (Ctrl+Shift+Z)" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-            <span>Redo</span>
+            <span>ทำซ้ำ</span>
           </button>
         </div>
-        <span class="ribbon-group-caption">History</span>
+        <span class="ribbon-group-caption">ประวัติ</span>
       </div>
 
       <span class="ribbon-divider"></span>
@@ -1210,178 +1305,214 @@
         <div class="ribbon-group-buttons">
           <label class="ribbon-btn" for="pdfInput">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M7 9l5-5 5 5"/><path d="M12 4v12"/></svg>
-            <span>Upload</span>
+            <span>อัปโหลด</span>
           </label>
           <input type="file" id="pdfInput" accept="application/pdf" multiple />
-          <button class="ribbon-btn" id="mergeBtn" title="Add another PDF's pages to the end of this one" type="button" disabled>
+          <button class="ribbon-btn" id="mergeBtn" title="เพิ่มหน้าจากไฟล์ PDF อื่นต่อท้ายไฟล์นี้" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="12" height="15" rx="2"/><path d="M9 12h9M18 12l-3-3M18 12l-3 3"/></svg>
-            <span>Merge</span>
+            <span>รวมไฟล์</span>
           </button>
           <input type="file" id="mergeInput" accept="application/pdf" hidden />
-          <button class="ribbon-btn" id="startOverBtn" title="Start over" type="button">
+          <button class="ribbon-btn" id="startOverBtn" title="เริ่มใหม่" type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/></svg>
-            <span>Start over</span>
+            <span>เริ่มใหม่</span>
           </button>
         </div>
-        <span class="ribbon-group-caption">File</span>
+        <span class="ribbon-group-caption">ไฟล์</span>
       </div>
 
       <span class="ribbon-divider"></span>
 
       <div class="ribbon-group">
         <div class="ribbon-group-buttons">
-          <button class="ribbon-btn" id="findBtn" title="Find text in this document" type="button" disabled>
+          <button class="ribbon-btn" id="findBtn" title="ค้นหาข้อความในเอกสารนี้" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <span>Find</span>
+            <span>ค้นหา</span>
           </button>
         </div>
-        <span class="ribbon-group-caption">Search</span>
+        <span class="ribbon-group-caption">ค้นหา</span>
       </div>
     </div>
 
     <div class="ribbon-panel" data-tab="edit">
       <div class="ribbon-group">
         <div class="ribbon-group-buttons">
-          <button class="ribbon-btn" id="addTextBtn" title="Add text" type="button" disabled>
+          <button class="ribbon-btn" id="addTextBtn" title="เพิ่มข้อความ" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
-            <span>Add text</span>
+            <span>เพิ่มข้อความ</span>
           </button>
-          <button class="ribbon-btn" id="uploadImageBtn" title="Upload image" type="button" disabled>
+          <button class="ribbon-btn" id="uploadImageBtn" title="อัปโหลดรูปภาพ" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-            <span>Image</span>
+            <span>รูปภาพ</span>
           </button>
           <input type="file" id="imageInput" accept="image/*" hidden />
-          <button class="ribbon-btn" id="duplicateBtn" title="Duplicate (Ctrl+D)" type="button" disabled>
+          <button class="ribbon-btn" id="duplicateBtn" title="ทำสำเนา (Ctrl+D)" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            <span>Duplicate</span>
+            <span>ทำสำเนา</span>
           </button>
-          <button class="ribbon-btn" id="refineBtn" title="Refine edges" type="button" disabled>
+          <button class="ribbon-btn" id="refineBtn" title="ปรับขอบภาพ" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.06 11.9l8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></svg>
-            <span>Refine</span>
+            <span>ปรับขอบ</span>
           </button>
-          <button class="ribbon-btn danger" id="deleteBtn" title="Delete selected (Delete)" type="button" disabled>
+          <button class="ribbon-btn danger" id="deleteBtn" title="ลบที่เลือก (Delete)" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-            <span>Delete</span>
+            <span>ลบ</span>
           </button>
         </div>
-        <span class="ribbon-group-caption">Content</span>
+        <span class="ribbon-group-caption">เนื้อหา</span>
       </div>
 
       <span class="ribbon-divider"></span>
 
       <div class="ribbon-group">
         <div class="ribbon-group-buttons ribbon-group-buttons--controls">
-          <select id="textFontSelect" title="Font" disabled>
+          <select id="textFontSelect" title="ฟอนต์" disabled>
             <option value="helvetica">Helvetica</option>
             <option value="times">Times</option>
             <option value="courier">Courier</option>
           </select>
-          <button class="ribbon-icon-btn" id="textBoldBtn" title="Bold" type="button" disabled>B</button>
-          <button class="ribbon-icon-btn" id="textItalicBtn" title="Italic" type="button" disabled>I</button>
-          <input type="color" id="textColorInput" value="#111111" title="Text color" disabled />
-          <label class="ribbon-slider-label">Size
+          <button class="ribbon-icon-btn" id="textBoldBtn" title="ตัวหนา" type="button" disabled>B</button>
+          <button class="ribbon-icon-btn" id="textItalicBtn" title="ตัวเอียง" type="button" disabled>I</button>
+          <input type="color" id="textColorInput" value="#111111" title="สีข้อความ" disabled />
+          <label class="ribbon-slider-label">ขนาด
             <input type="range" id="fontSizeSlider" min="8" max="120" value="24" disabled />
           </label>
-          <label class="ribbon-slider-label">Opacity
+          <label class="ribbon-slider-label">ความทึบ
             <input type="range" id="opacitySlider" min="0" max="100" value="100" disabled />
           </label>
         </div>
-        <span class="ribbon-group-caption">Format</span>
+        <span class="ribbon-group-caption">รูปแบบ</span>
       </div>
 
       <span class="ribbon-divider"></span>
 
       <div class="ribbon-group">
         <div class="ribbon-group-buttons" id="alignGroup">
-          <button class="ribbon-icon-btn" id="alignLeftBtn" title="Align left" type="button" disabled>
+          <button class="ribbon-icon-btn" id="alignLeftBtn" title="ชิดซ้าย" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="3" x2="4" y2="21"/><rect x="7" y="6" width="12" height="4"/><rect x="7" y="14" width="7" height="4"/></svg>
           </button>
-          <button class="ribbon-icon-btn" id="alignHCenterBtn" title="Align center (horizontal)" type="button" disabled>
+          <button class="ribbon-icon-btn" id="alignHCenterBtn" title="กึ่งกลางแนวนอน" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="3" x2="12" y2="21"/><rect x="6" y="6" width="12" height="4"/><rect x="8.5" y="14" width="7" height="4"/></svg>
           </button>
-          <button class="ribbon-icon-btn" id="alignRightBtn" title="Align right" type="button" disabled>
+          <button class="ribbon-icon-btn" id="alignRightBtn" title="ชิดขวา" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="20" y1="3" x2="20" y2="21"/><rect x="5" y="6" width="12" height="4"/><rect x="10" y="14" width="7" height="4"/></svg>
           </button>
-          <button class="ribbon-icon-btn" id="alignTopBtn" title="Align top" type="button" disabled>
+          <button class="ribbon-icon-btn" id="alignTopBtn" title="ชิดบน" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="4" x2="21" y2="4"/><rect x="6" y="7" width="4" height="12"/><rect x="14" y="7" width="4" height="7"/></svg>
           </button>
-          <button class="ribbon-icon-btn" id="alignVMiddleBtn" title="Align middle (vertical)" type="button" disabled>
+          <button class="ribbon-icon-btn" id="alignVMiddleBtn" title="กึ่งกลางแนวตั้ง" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><rect x="6" y="6" width="4" height="12"/><rect x="14" y="8.5" width="4" height="7"/></svg>
           </button>
-          <button class="ribbon-icon-btn" id="alignBottomBtn" title="Align bottom" type="button" disabled>
+          <button class="ribbon-icon-btn" id="alignBottomBtn" title="ชิดล่าง" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="20" x2="21" y2="20"/><rect x="6" y="5" width="4" height="12"/><rect x="14" y="10" width="4" height="7"/></svg>
           </button>
-          <button class="ribbon-icon-btn" id="distributeHBtn" title="Distribute horizontal spacing" type="button" disabled>
+          <button class="ribbon-icon-btn" id="distributeHBtn" title="กระจายห่างแนวนอน" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="4" height="10"/><rect x="10" y="7" width="4" height="10"/><rect x="17" y="7" width="4" height="10"/></svg>
           </button>
-          <button class="ribbon-icon-btn" id="distributeVBtn" title="Distribute vertical spacing" type="button" disabled>
+          <button class="ribbon-icon-btn" id="distributeVBtn" title="กระจายห่างแนวตั้ง" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="4"/><rect x="7" y="10" width="10" height="4"/><rect x="7" y="17" width="10" height="4"/></svg>
           </button>
         </div>
-        <span class="ribbon-group-caption">Arrange</span>
+        <span class="ribbon-group-caption">จัดเรียง</span>
       </div>
     </div>
 
     <div class="ribbon-panel" data-tab="draw">
       <div class="ribbon-group">
         <div class="ribbon-group-buttons">
-          <button class="ribbon-icon-btn active" id="selectToolBtn" title="Select (click a shape to move/resize it, or press Escape)" type="button" disabled>
+          <button class="ribbon-icon-btn active" id="selectToolBtn" title="เลือก (คลิกรูปทรงเพื่อย้าย/ปรับขนาด หรือกด Escape)" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l7 17 2-7 7-2z"/></svg>
           </button>
-          <button class="ribbon-icon-btn" id="penToolBtn" title="Pen" type="button" disabled>
+          <button class="ribbon-icon-btn" id="penToolBtn" title="ปากกา" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
           </button>
-          <button class="ribbon-icon-btn" id="highlightToolBtn" title="Highlighter" type="button" disabled>
+          <button class="ribbon-icon-btn" id="highlightToolBtn" title="ปากกาเน้นข้อความ" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l6 6"/><path d="M4 20l3.5-1 8-8-2.5-2.5-8 8L4 20z"/><path d="M14.5 6.5L18 3l3 3-3.5 3.5"/></svg>
           </button>
-          <button class="ribbon-icon-btn" id="lineToolBtn" title="Line" type="button" disabled>
+          <button class="ribbon-icon-btn" id="lineToolBtn" title="เส้นตรง" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="19" x2="19" y2="5"/></svg>
           </button>
-          <button class="ribbon-icon-btn" id="arrowToolBtn" title="Arrow" type="button" disabled>
+          <button class="ribbon-icon-btn" id="arrowToolBtn" title="ลูกศร" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="19" x2="19" y2="5"/><polyline points="9 5 19 5 19 15"/></svg>
           </button>
-          <button class="ribbon-icon-btn" id="rectToolBtn" title="Rectangle" type="button" disabled>
+          <button class="ribbon-icon-btn" id="rectToolBtn" title="สี่เหลี่ยม" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1"/></svg>
           </button>
-          <button class="ribbon-icon-btn" id="ellipseToolBtn" title="Ellipse" type="button" disabled>
+          <button class="ribbon-icon-btn" id="ellipseToolBtn" title="วงรี" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="12" rx="9" ry="7"/></svg>
           </button>
-          <button class="ribbon-icon-btn" id="redactToolBtn" title="Redact (permanently covers the area — see note)" type="button" disabled>
+          <button class="ribbon-icon-btn" id="redactToolBtn" title="ปิดทับถาวร (ดูคำเตือนก่อนใช้)" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="1" fill="currentColor"/></svg>
           </button>
-          <input type="color" id="strokeColorInput" value="#e11d48" title="Color" disabled />
-          <input type="range" id="strokeWidthSlider" min="1" max="24" value="3" title="Stroke width" disabled />
+          <input type="color" id="strokeColorInput" value="#e11d48" title="สี" disabled />
+          <input type="range" id="strokeWidthSlider" min="1" max="24" value="3" title="ความหนาเส้น" disabled />
         </div>
-        <span class="ribbon-group-caption">Tools</span>
+        <span class="ribbon-group-caption">เครื่องมือ</span>
       </div>
     </div>
 
     <div class="ribbon-panel" data-tab="form">
       <div class="ribbon-group">
         <div class="ribbon-group-buttons">
-          <button class="ribbon-btn" id="formFieldsBtn" title="Fill out this PDF's form fields" type="button" hidden>
+          <button class="ribbon-btn" id="formFieldsBtn" title="กรอกฟอร์มของไฟล์ PDF นี้" type="button" hidden>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="13" y2="13"/></svg>
-            <span>Fill form</span>
+            <span>กรอกฟอร์ม</span>
           </button>
-          <span class="ribbon-hint">Only appears when the loaded PDF has fillable form fields.</span>
+          <span class="ribbon-hint">จะแสดงเมื่อไฟล์ PDF ที่เปิดอยู่มีช่องฟอร์มให้กรอก</span>
         </div>
-        <span class="ribbon-group-caption">Form fields</span>
+        <span class="ribbon-group-caption">ช่องฟอร์ม</span>
       </div>
     </div>
 
     <div class="ribbon-panel" data-tab="sign">
       <div class="ribbon-group">
         <div class="ribbon-group-buttons">
-          <button class="ribbon-btn" id="signatureBtn" title="Add signature" type="button" disabled>
+          <button class="ribbon-btn" id="signatureBtn" title="เพิ่มลายเซ็น" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c2-4 4 4 6 0s3-8 5-4 3 6 5 2"/><path d="M3 21h18"/></svg>
-            <span>Signature</span>
+            <span>ลายเซ็น</span>
           </button>
-          <button class="ribbon-btn" id="stampBtn" title="Insert a previously uploaded image" type="button" disabled>
+          <button class="ribbon-btn" id="stampBtn" title="แทรกรูปที่เคยอัปโหลดไว้" type="button" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="13" height="13" rx="2"/><path d="M8 21h10a2 2 0 0 0 2-2V9"/><circle cx="7.5" cy="7.5" r="1.5"/><path d="M3 13l3-3 5 5"/></svg>
-            <span>Saved images</span>
+            <span>รูปที่บันทึกไว้</span>
           </button>
         </div>
-        <span class="ribbon-group-caption">Sign &amp; stamp</span>
+        <span class="ribbon-group-caption">ลายเซ็นและตรา</span>
+      </div>
+    </div>
+
+    <div class="ribbon-panel" data-tab="tools">
+      <div class="ribbon-group">
+        <div class="ribbon-group-buttons">
+          <button class="ribbon-btn" id="protectBtn" title="ใส่รหัสผ่านและเข้ารหัส PDF ก่อนดาวน์โหลด" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span>ใส่รหัสผ่าน</span>
+          </button>
+        </div>
+        <span class="ribbon-group-caption">รหัสผ่าน</span>
+      </div>
+
+      <span class="ribbon-divider"></span>
+
+      <div class="ribbon-group">
+        <div class="ribbon-group-buttons">
+          <button class="ribbon-btn" id="ocrBtn" title="แปลง PDF ที่เป็นรูปภาพ/สแกน ให้ค้นหาและคัดลอกข้อความได้" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="7" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="14" y2="12"/><line x1="7" y1="16" x2="11" y2="16"/></svg>
+            <span>OCR</span>
+          </button>
+        </div>
+        <span class="ribbon-group-caption">แปลงเป็นข้อความค้นหาได้</span>
+      </div>
+
+      <span class="ribbon-divider"></span>
+
+      <div class="ribbon-group">
+        <div class="ribbon-group-buttons">
+          <button class="ribbon-btn" id="compareBtn" title="เปรียบเทียบไฟล์นี้กับ PDF อีกไฟล์" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="9" height="16" rx="1.5"/><rect x="13" y="4" width="9" height="16" rx="1.5"/><line x1="11" y1="8" x2="13" y2="8"/><line x1="11" y1="16" x2="13" y2="16"/></svg>
+            <span>เปรียบเทียบ PDF</span>
+          </button>
+        </div>
+        <span class="ribbon-group-caption">เปรียบเทียบ 2 ไฟล์</span>
       </div>
     </div>
   </div>
@@ -1393,41 +1524,41 @@
     <div class="dropzone-icon">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M15 3v5h5"/></svg>
     </div>
-    <h2>Drop a PDF, or choose one</h2>
-    <p>Paste or drag images onto the page afterward — backgrounds are cut out automatically and dropped onto the document. Works on any page, and you can add more than one image, plus text labels.</p>
+    <h2>ลากไฟล์ PDF มาวาง หรือเลือกไฟล์</h2>
+    <p>วางหรือลากรูปภาพลงบนหน้าได้ทีหลัง — พื้นหลังจะถูกลบออกให้อัตโนมัติแล้ววางลงในเอกสารเลย ใช้ได้ทุกหน้า และเพิ่มได้มากกว่าหนึ่งรูป พร้อมป้ายข้อความด้วย</p>
 
     <div id="recentFileBanner" class="recent-file-banner" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M15 3v5h5"/></svg>
-      <span class="recent-file-text">Continue with <strong id="recentFileName"></strong>?</span>
-      <button class="btn secondary" id="continueRecentBtn" type="button">Continue</button>
-      <button class="icon-btn" id="clearRecentBtn" title="Forget this file" type="button">
+      <span class="recent-file-text">ทำต่อจากไฟล์ <strong id="recentFileName"></strong> เลยไหม?</span>
+      <button class="btn secondary" id="continueRecentBtn" type="button">ทำต่อ</button>
+      <button class="icon-btn" id="clearRecentBtn" title="ลืมไฟล์นี้" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
 
     <label class="btn" for="pdfInput">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M7 9l5-5 5 5"/><path d="M12 4v12"/></svg>
-      Choose PDF
+      เลือกไฟล์ PDF
     </label>
 
     <div class="steps">
       <div class="step">
         <span class="step-num">1</span>
-        <span class="step-label">Upload a PDF, pick a page</span>
+        <span class="step-label">อัปโหลด PDF แล้วเลือกหน้า</span>
       </div>
       <div class="step">
         <span class="step-num">2</span>
-        <span class="step-label">Paste or drop images — backgrounds removed automatically</span>
+        <span class="step-label">วางหรือลากรูปภาพ — ลบพื้นหลังให้อัตโนมัติ</span>
       </div>
       <div class="step">
         <span class="step-num">3</span>
-        <span class="step-label">Arrange, refine, then export</span>
+        <span class="step-label">จัดวาง ปรับแต่ง แล้วส่งออก</span>
       </div>
     </div>
 
     <span class="privacy-note">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-      Runs entirely in your browser — files never leave this device
+      ทำงานในเบราว์เซอร์ทั้งหมด — ไฟล์ไม่ถูกส่งออกไปไหน
     </span>
   </div>
 
@@ -1436,7 +1567,7 @@
     <div class="editor-body">
       <aside id="pageSidebar" class="page-sidebar">
         <div class="page-sidebar-header">
-          <span>Pages</span>
+          <span>หน้าเอกสาร</span>
         </div>
         <div id="pageThumbList" class="page-thumb-list"></div>
       </aside>
@@ -1448,35 +1579,35 @@
             <div id="pasteHint" class="paste-hint">
               <div class="paste-hint-badge">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
-                <span class="kbd-row"><kbd>Ctrl</kbd>+<kbd>V</kbd> to paste, or drop an image here</span>
-                <span class="sub">Its background is removed automatically</span>
+                <span class="kbd-row"><kbd>Ctrl</kbd>+<kbd>V</kbd> เพื่อวาง หรือลากรูปมาวางตรงนี้</span>
+                <span class="sub">พื้นหลังจะถูกลบให้อัตโนมัติ</span>
               </div>
             </div>
           </div>
         </div>
 
     <div class="status-bar">
-      <button class="icon-btn" id="toggleSidebarBtn" title="Toggle page panel" type="button">
+      <button class="icon-btn" id="toggleSidebarBtn" title="เปิด/ปิดแผงหน้าเอกสาร" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
       </button>
 
       <span class="divider"></span>
 
-      <button class="icon-btn" id="prevPageBtn" title="Previous page" type="button">
+      <button class="icon-btn" id="prevPageBtn" title="หน้าก่อนหน้า" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
       </button>
-      <span class="page-indicator" id="pageIndicator">Page 1 of 1</span>
-      <button class="icon-btn" id="nextPageBtn" title="Next page" type="button">
+      <span class="page-indicator" id="pageIndicator">หน้า 1 จาก 1</span>
+      <button class="icon-btn" id="nextPageBtn" title="หน้าถัดไป" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
       </button>
 
       <span class="divider"></span>
 
-      <button class="icon-btn" id="zoomOutBtn" title="Zoom out" type="button">
+      <button class="icon-btn" id="zoomOutBtn" title="ซูมออก" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
       </button>
-      <button class="zoom-label" id="zoomLabel" title="Reset zoom" type="button">100%</button>
-      <button class="icon-btn" id="zoomInBtn" title="Zoom in" type="button">
+      <button class="zoom-label" id="zoomLabel" title="รีเซ็ตซูม" type="button">100%</button>
+      <button class="icon-btn" id="zoomInBtn" title="ซูมเข้า" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       </button>
 
@@ -1490,11 +1621,11 @@
 </main>
 
 <!-- Refine-edges modal: manual brush touch-up of the AI background removal -->
-<div id="refineModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Refine edges" hidden>
+<div id="refineModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="ปรับขอบภาพ" hidden>
   <div class="modal-panel">
     <div class="modal-header">
-      <h3>Refine edges</h3>
-      <button class="icon-btn" id="closeRefineBtn" title="Close" type="button">
+      <h3>ปรับขอบภาพ</h3>
+      <button class="icon-btn" id="closeRefineBtn" title="ปิด" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
@@ -1504,39 +1635,39 @@
       </div>
       <div class="refine-controls">
         <div class="tool-toggle">
-          <button class="toggle-btn active" id="eraseModeBtn" data-mode="erase" type="button">Erase</button>
-          <button class="toggle-btn" id="restoreModeBtn" data-mode="restore" type="button">Restore</button>
+          <button class="toggle-btn active" id="eraseModeBtn" data-mode="erase" type="button">ลบ</button>
+          <button class="toggle-btn" id="restoreModeBtn" data-mode="restore" type="button">คืนค่า</button>
         </div>
         <label class="slider-label">
-          Brush size
+          ขนาดแปรง
           <input type="range" id="brushSizeSlider" min="5" max="120" value="30" />
         </label>
-        <p class="refine-hint">Erase paints away leftover background. Restore brings back the original photo where the AI cut too much.</p>
+        <p class="refine-hint">ลบ = ทาสีทับพื้นหลังที่หลงเหลือ คืนค่า = เอารูปต้นฉบับกลับมาตรงที่ AI ตัดออกมากเกินไป</p>
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn secondary" id="resetMaskBtn" type="button">Reset to AI result</button>
+      <button class="btn secondary" id="resetMaskBtn" type="button">รีเซ็ตกลับผลลัพธ์ของ AI</button>
       <div class="modal-footer-right">
-        <button class="btn secondary" id="cancelRefineBtn" type="button">Cancel</button>
-        <button class="btn" id="applyMaskBtn" type="button">Apply changes</button>
+        <button class="btn secondary" id="cancelRefineBtn" type="button">ยกเลิก</button>
+        <button class="btn" id="applyMaskBtn" type="button">ใช้การเปลี่ยนแปลง</button>
       </div>
     </div>
   </div>
 </div>
 
 <!-- Signature modal: draw or type, then drop onto the page as an image layer -->
-<div id="signatureModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Add signature" hidden>
+<div id="signatureModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="เพิ่มลายเซ็น" hidden>
   <div class="modal-panel">
     <div class="modal-header">
-      <h3>Add signature</h3>
-      <button class="icon-btn" id="closeSignatureBtn" title="Close" type="button">
+      <h3>เพิ่มลายเซ็น</h3>
+      <button class="icon-btn" id="closeSignatureBtn" title="ปิด" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
     <div class="refine-body">
       <div class="tool-toggle">
-        <button class="toggle-btn active" id="sigDrawModeBtn" type="button">Draw</button>
-        <button class="toggle-btn" id="sigTypeModeBtn" type="button">Type</button>
+        <button class="toggle-btn active" id="sigDrawModeBtn" type="button">วาดเอง</button>
+        <button class="toggle-btn" id="sigTypeModeBtn" type="button">พิมพ์ชื่อ</button>
       </div>
 
       <div id="sigDrawPane">
@@ -1544,13 +1675,13 @@
           <canvas id="signatureDrawCanvas" width="560" height="220"></canvas>
         </div>
         <div class="refine-controls">
-          <button class="btn secondary" id="sigClearBtn" type="button">Clear</button>
-          <p class="refine-hint">Draw with your mouse or finger — the background stays transparent.</p>
+          <button class="btn secondary" id="sigClearBtn" type="button">ล้าง</button>
+          <p class="refine-hint">วาดด้วยเมาส์หรือนิ้ว — พื้นหลังจะโปร่งใสเสมอ</p>
         </div>
       </div>
 
       <div id="sigTypePane" hidden>
-        <input type="text" id="sigTextInput" class="sig-text-input" placeholder="Type your name" maxlength="60" />
+        <input type="text" id="sigTextInput" class="sig-text-input" placeholder="พิมพ์ชื่อของคุณ" maxlength="60" />
         <div class="sig-type-preview-wrap">
           <span id="sigTypePreview" class="sig-type-preview"></span>
         </div>
@@ -1559,8 +1690,8 @@
     <div class="modal-footer">
       <span></span>
       <div class="modal-footer-right">
-        <button class="btn secondary" id="cancelSignatureBtn" type="button">Cancel</button>
-        <button class="btn" id="insertSignatureBtn" type="button">Insert</button>
+        <button class="btn secondary" id="cancelSignatureBtn" type="button">ยกเลิก</button>
+        <button class="btn" id="insertSignatureBtn" type="button">แทรก</button>
       </div>
     </div>
   </div>
@@ -1568,11 +1699,11 @@
 
 <!-- Saved-images modal: re-insert a previously pasted/uploaded image without
      having to find and upload the file again. -->
-<div id="stampModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Insert a saved image" hidden>
+<div id="stampModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="แทรกรูปที่บันทึกไว้" hidden>
   <div class="modal-panel">
     <div class="modal-header">
-      <h3>Your uploaded images</h3>
-      <button class="icon-btn" id="closeStampBtn" title="Close" type="button">
+      <h3>รูปที่คุณเคยอัปโหลด</h3>
+      <button class="icon-btn" id="closeStampBtn" title="ปิด" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
@@ -1583,40 +1714,140 @@
 </div>
 
 <!-- Form fields modal: fill in this PDF's existing AcroForm fields -->
-<div id="formFieldsModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Fill form" hidden>
+<div id="formFieldsModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="กรอกฟอร์ม" hidden>
   <div class="modal-panel">
     <div class="modal-header">
-      <h3>Fill out this PDF's form</h3>
-      <button class="icon-btn" id="closeFormFieldsBtn" title="Close" type="button">
+      <h3>กรอกฟอร์มของไฟล์นี้</h3>
+      <button class="icon-btn" id="closeFormFieldsBtn" title="ปิด" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
     <div class="refine-body">
-      <p class="refine-hint">Values are baked into the PDF as flat text/marks when you use Save &amp; Export — the fields won't stay fillable in the downloaded file.</p>
+      <p class="refine-hint">ค่าที่กรอกจะถูกฝังเป็นข้อความ/เครื่องหมายถาวรตอนกด บันทึกและส่งออก — ฟิลด์จะไม่สามารถกรอกซ้ำได้อีกในไฟล์ที่ดาวน์โหลด</p>
       <div id="formFieldsList" class="form-fields-list"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn secondary" id="resetFormFieldsBtn" type="button">Reset to original values</button>
+      <button class="btn secondary" id="resetFormFieldsBtn" type="button">รีเซ็ตกลับค่าเดิม</button>
       <div class="modal-footer-right">
-        <button class="btn" id="doneFormFieldsBtn" type="button">Done</button>
+        <button class="btn" id="doneFormFieldsBtn" type="button">เสร็จสิ้น</button>
       </div>
     </div>
   </div>
 </div>
 
 <!-- Find modal: search this document's text (via pdf.js), jump to matching pages -->
-<div id="findModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Find text" hidden>
+<div id="findModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="ค้นหาข้อความ" hidden>
   <div class="modal-panel">
     <div class="modal-header">
-      <h3>Find in document</h3>
-      <button class="icon-btn" id="closeFindBtn" title="Close" type="button">
+      <h3>ค้นหาในเอกสาร</h3>
+      <button class="icon-btn" id="closeFindBtn" title="ปิด" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
     <div class="refine-body">
-      <input type="text" id="findInput" class="sig-text-input" placeholder="Search text…" autocomplete="off" style="margin-bottom:0;" />
+      <input type="text" id="findInput" class="sig-text-input" placeholder="ค้นหาข้อความ…" autocomplete="off" style="margin-bottom:0;" />
       <div id="findStatus" class="find-status"></div>
       <div id="findResultsList" class="find-results-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Password/encryption modal: protect the exported PDF with a user password -->
+<div id="passwordModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="ใส่รหัสผ่าน PDF" hidden>
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h3>ใส่รหัสผ่าน PDF</h3>
+      <button class="icon-btn" id="closePasswordBtn" title="ปิด" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="refine-body">
+      <label class="field-label" for="userPasswordInput">รหัสผ่านสำหรับเปิดไฟล์ (จำเป็น)</label>
+      <input type="password" id="userPasswordInput" class="sig-text-input" placeholder="ตั้งรหัสผ่าน…" autocomplete="new-password" />
+
+      <label class="field-label" for="ownerPasswordInput">รหัสผ่านเจ้าของไฟล์ (ไม่บังคับ — ปลดล็อกสิทธิ์เต็ม)</label>
+      <input type="password" id="ownerPasswordInput" class="sig-text-input" placeholder="เว้นว่างได้ถ้าไม่ต้องการ" autocomplete="new-password" />
+
+      <div class="permission-list">
+        <label class="permission-item"><input type="checkbox" id="permPrintingCheck" checked /> อนุญาตให้พิมพ์</label>
+        <label class="permission-item"><input type="checkbox" id="permCopyingCheck" checked /> อนุญาตให้คัดลอกข้อความ/รูปภาพ</label>
+        <label class="permission-item"><input type="checkbox" id="permModifyingCheck" /> อนุญาตให้แก้ไขเอกสาร</label>
+      </div>
+      <p class="refine-hint">การเข้ารหัสใช้มาตรฐาน AES-128 ตามสเปก PDF — ต้องใส่รหัสผ่านนี้ทุกครั้งที่เปิดไฟล์ในโปรแกรมอ่าน PDF ใดๆ</p>
+      <div id="passwordStatus" class="find-status"></div>
+    </div>
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-right">
+        <button class="btn secondary" id="cancelPasswordBtn" type="button">ยกเลิก</button>
+        <button class="btn" id="applyPasswordBtn" type="button">ใส่รหัสผ่านและดาวน์โหลด</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- OCR modal: render each page to an image, recognize text via Tesseract.js,
+     then embed the recognized words as invisible (opacity 0) text on top of
+     the existing page content — the standard "searchable PDF" trick, so the
+     page still looks exactly the same but text becomes selectable/findable. -->
+<div id="ocrModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="OCR แปลงเป็นข้อความค้นหาได้" hidden>
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h3>แปลงเป็น PDF ที่ค้นหาได้ (OCR)</h3>
+      <button class="icon-btn" id="closeOcrBtn" title="ปิด" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="refine-body">
+      <label class="field-label" for="ocrLangSelect">ภาษาในเอกสาร</label>
+      <select id="ocrLangSelect" class="sig-text-input">
+        <option value="eng+tha" selected>อังกฤษ + ไทย</option>
+        <option value="eng">อังกฤษเท่านั้น</option>
+        <option value="tha">ไทยเท่านั้น</option>
+      </select>
+      <p class="refine-hint">ใช้เวลาประมวลผลสักครู่ต่อหน้า (ทำงานในเบราว์เซอร์ทั้งหมด ไม่มีการอัปโหลดไฟล์ไปที่ไหน) ข้อความที่แปลงได้จะถูกซ่อนไว้ใต้ภาพเดิม หน้าตาเอกสารจะไม่เปลี่ยน แต่จะค้นหา/คัดลอกข้อความได้</p>
+      <div id="ocrProgressWrap" class="find-status" hidden>
+        <span id="ocrProgressText"></span>
+        <span class="progress-track"><span class="progress-fill" id="ocrProgressFill" style="width:0%"></span></span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-right">
+        <button class="btn secondary" id="cancelOcrBtn" type="button">ยกเลิก</button>
+        <button class="btn" id="startOcrBtn" type="button">เริ่ม OCR</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Compare/diff modal: pick a second PDF, extract text per page via pdf.js,
+     word-diff each page against the currently loaded file. -->
+<div id="compareModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="เปรียบเทียบ PDF" hidden>
+  <div class="modal-panel modal-panel--wide">
+    <div class="modal-header">
+      <h3>เปรียบเทียบ PDF</h3>
+      <button class="icon-btn" id="closeCompareBtn" title="ปิด" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="refine-body" id="comparePickPane">
+      <p class="refine-hint">เปรียบเทียบไฟล์ที่เปิดอยู่ตอนนี้ (<strong id="compareCurrentName"></strong>) กับ PDF อีกไฟล์หนึ่ง โดยเทียบเนื้อหาข้อความทีละหน้า</p>
+      <label class="btn secondary" for="compareFileInput" style="align-self:flex-start;">เลือกไฟล์ PDF ที่จะเปรียบเทียบ</label>
+      <input type="file" id="compareFileInput" accept="application/pdf" hidden />
+      <span id="compareFileName" class="ribbon-hint"></span>
+      <div id="compareStatus" class="find-status"></div>
+    </div>
+    <div class="refine-body" id="compareResultsPane" hidden>
+      <div id="compareSummary" class="compare-summary"></div>
+      <div id="compareResultsList" class="compare-results-list"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn secondary" id="compareBackBtn" type="button" hidden>‹ เลือกไฟล์ใหม่</button>
+      <div class="modal-footer-right">
+        <button class="btn secondary" id="cancelCompareBtn" type="button">ปิด</button>
+        <button class="btn" id="startCompareBtn" type="button" disabled>เปรียบเทียบ</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1627,10 +1858,13 @@
   // esm.sh serves npm packages as browser-ready ES modules.
   // ---------------------------------------------------------------------
   import { removeBackground as imglyRemoveBackground } from "https://esm.sh/@imgly/background-removal@1.5.8";
+  // pdf-lib-plus-encrypt is a drop-in fork of pdf-lib (same API/exports) with
+  // one addition: pdfDoc.encrypt({...}) before .save(), used by the Password
+  // tab. Everywhere else in this file it behaves exactly like plain pdf-lib.
   import {
     PDFDocument, degrees, rgb, StandardFonts,
     PDFTextField, PDFCheckBox, PDFRadioGroup, PDFDropdown, PDFOptionList,
-  } from "https://esm.sh/pdf-lib@1.17.1";
+  } from "https://esm.sh/pdf-lib-plus-encrypt@1.1.0";
 
   // ---------------------------------------------------------------------
   // Setup
@@ -1733,6 +1967,44 @@
   const findStatus = document.getElementById("findStatus");
   const findResultsList = document.getElementById("findResultsList");
   const closeFindBtn = document.getElementById("closeFindBtn");
+
+  // ---- Tools tab: password/encryption, OCR, compare ------------------
+  const protectBtn = document.getElementById("protectBtn");
+  const passwordModal = document.getElementById("passwordModal");
+  const closePasswordBtn = document.getElementById("closePasswordBtn");
+  const cancelPasswordBtn = document.getElementById("cancelPasswordBtn");
+  const applyPasswordBtn = document.getElementById("applyPasswordBtn");
+  const userPasswordInput = document.getElementById("userPasswordInput");
+  const ownerPasswordInput = document.getElementById("ownerPasswordInput");
+  const permPrintingCheck = document.getElementById("permPrintingCheck");
+  const permCopyingCheck = document.getElementById("permCopyingCheck");
+  const permModifyingCheck = document.getElementById("permModifyingCheck");
+  const passwordStatus = document.getElementById("passwordStatus");
+
+  const ocrBtn = document.getElementById("ocrBtn");
+  const ocrModal = document.getElementById("ocrModal");
+  const closeOcrBtn = document.getElementById("closeOcrBtn");
+  const cancelOcrBtn = document.getElementById("cancelOcrBtn");
+  const startOcrBtn = document.getElementById("startOcrBtn");
+  const ocrLangSelect = document.getElementById("ocrLangSelect");
+  const ocrProgressWrap = document.getElementById("ocrProgressWrap");
+  const ocrProgressText = document.getElementById("ocrProgressText");
+  const ocrProgressFill = document.getElementById("ocrProgressFill");
+
+  const compareBtn = document.getElementById("compareBtn");
+  const compareModal = document.getElementById("compareModal");
+  const closeCompareBtn = document.getElementById("closeCompareBtn");
+  const cancelCompareBtn = document.getElementById("cancelCompareBtn");
+  const compareBackBtn = document.getElementById("compareBackBtn");
+  const startCompareBtn = document.getElementById("startCompareBtn");
+  const compareFileInput = document.getElementById("compareFileInput");
+  const compareFileName = document.getElementById("compareFileName");
+  const compareCurrentName = document.getElementById("compareCurrentName");
+  const compareStatus = document.getElementById("compareStatus");
+  const comparePickPane = document.getElementById("comparePickPane");
+  const compareResultsPane = document.getElementById("compareResultsPane");
+  const compareSummary = document.getElementById("compareSummary");
+  const compareResultsList = document.getElementById("compareResultsList");
 
   const alignLeftBtn = document.getElementById("alignLeftBtn");
   const alignHCenterBtn = document.getElementById("alignHCenterBtn");
@@ -1941,12 +2213,12 @@
   // ---------------------------------------------------------------------
   async function loadPdfFile(file) {
     if (!file || file.type !== "application/pdf") {
-      alert("Please choose a PDF file.");
+      alert("กรุณาเลือกไฟล์ PDF");
       return;
     }
 
     currentPdfFile = file;
-    setStatus("Loading PDF…", "loading");
+    setStatus("กำลังโหลด PDF…", "loading");
 
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -1966,12 +2238,15 @@
       dropzone.style.display = "none";
       editorArea.classList.add("visible");
       fileNameLabel.textContent = file.name;
-      setStatus("PDF loaded", "success");
+      setStatus("โหลด PDF สำเร็จ", "success");
       window.setTimeout(() => setStatus("", "idle"), 1800);
       recentFileBanner.hidden = true; // no longer relevant once a PDF is actually open
       saveLastPdfToDb(file); // best-effort local cache so next visit skips re-uploading
 
       findBtn.disabled = false;
+      protectBtn.disabled = false;
+      ocrBtn.disabled = false;
+      compareBtn.disabled = false;
       detectFormFields(file); // best-effort — hides the button again if no usable form
       // (re-reads `file` itself rather than reusing `arrayBuffer` above, since
       // pdf.js's getDocument() may have already transferred/detached that buffer)
@@ -1979,8 +2254,8 @@
       generateAllThumbnails(); // fire-and-forget — sidebar fills in as thumbnails finish
     } catch (err) {
       console.error(err);
-      setStatus("Failed to load PDF", "error");
-      alert("Could not load that PDF: " + err.message);
+      setStatus("โหลด PDF ไม่สำเร็จ", "error");
+      alert("ไม่สามารถโหลดไฟล์ PDF นี้ได้: " + err.message);
     }
   }
 
@@ -2012,17 +2287,17 @@
     }
     const pdfFiles = allFiles.filter((f) => f.type === "application/pdf");
     if (pdfFiles.length === 0) {
-      alert("Please choose PDF files.");
+      alert("กรุณาเลือกไฟล์ PDF");
       return;
     }
-    setStatus(`Combining ${pdfFiles.length} PDFs…`, "loading");
+    setStatus(`กำลังรวม ${pdfFiles.length} ไฟล์ PDF…`, "loading");
     try {
       const merged = await combinePdfFiles(pdfFiles);
       await loadPdfFile(merged);
     } catch (err) {
       console.error(err);
-      setStatus("Failed to combine PDFs", "error");
-      alert("Could not combine those PDFs: " + err.message);
+      setStatus("รวมไฟล์ PDF ไม่สำเร็จ", "error");
+      alert("ไม่สามารถรวมไฟล์เหล่านั้นได้: " + err.message);
     }
   }
 
@@ -2078,7 +2353,7 @@
     if (formFieldsMeta.length === 0) {
       const empty = document.createElement("div");
       empty.className = "form-fields-empty";
-      empty.textContent = "This PDF has no fillable form fields.";
+      empty.textContent = "ไฟล์ PDF นี้ไม่มีช่องฟอร์มให้กรอก";
       formFieldsList.appendChild(empty);
       return;
     }
@@ -2244,7 +2519,7 @@
       renderFindResults();
       return;
     }
-    findStatus.textContent = "Searching…";
+    findStatus.textContent = "กำลังค้นหา…";
     const results = [];
     for (const originalIndex of pageOrder) {
       let text;
@@ -2270,8 +2545,8 @@
     if (token !== findSearchToken) return; // a newer search has since started
     findResults = results;
     findStatus.textContent = results.length
-      ? `${results.length} page${results.length === 1 ? "" : "s"} match`
-      : "No matches";
+      ? `พบ ${results.length} หน้าที่ตรงกัน`
+      : "ไม่พบข้อความที่ค้นหา";
     renderFindResults();
   }
 
@@ -2285,7 +2560,7 @@
 
       const pageLabel = document.createElement("span");
       pageLabel.className = "find-result-page";
-      pageLabel.textContent = `Page ${position + 1}`;
+      pageLabel.textContent = `หน้า ${position + 1}`;
 
       const snippet = document.createElement("span");
       snippet.className = "find-result-snippet";
@@ -2534,6 +2809,9 @@
     formFieldValues = {};
     formFieldsBtn.hidden = true;
     findBtn.disabled = true;
+    protectBtn.disabled = true;
+    ocrBtn.disabled = true;
+    compareBtn.disabled = true;
     pageThumbList.innerHTML = "";
     saveBtn.disabled = true;
     mergeBtn.disabled = true;
@@ -2659,7 +2937,7 @@
     // (pageOrder), which can differ from the raw original index once pages
     // have been reordered or deleted.
     const position = pageOrder.indexOf(currentPageIndex);
-    pageIndicator.textContent = `Page ${position + 1} of ${pageOrder.length}`;
+    pageIndicator.textContent = `หน้า ${position + 1} จาก ${pageOrder.length}`;
     prevPageBtn.disabled = position <= 0;
     nextPageBtn.disabled = position >= pageOrder.length - 1;
   }
@@ -2755,7 +3033,7 @@
       const rotateBtn = document.createElement("button");
       rotateBtn.type = "button";
       rotateBtn.className = "icon-btn";
-      rotateBtn.title = "Rotate page";
+      rotateBtn.title = "หมุนหน้า";
       rotateBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3.5-7.14"/><polyline points="21 3 21 9 15 9"/></svg>';
       rotateBtn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -2765,7 +3043,7 @@
       const exportThumbBtn = document.createElement("button");
       exportThumbBtn.type = "button";
       exportThumbBtn.className = "icon-btn";
-      exportThumbBtn.title = "Export this page as its own PDF";
+      exportThumbBtn.title = "ส่งออกหน้านี้เป็น PDF แยก";
       exportThumbBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>';
       exportThumbBtn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -2775,7 +3053,7 @@
       const deleteThumbBtn = document.createElement("button");
       deleteThumbBtn.type = "button";
       deleteThumbBtn.className = "icon-btn danger";
-      deleteThumbBtn.title = "Delete page";
+      deleteThumbBtn.title = "ลบหน้านี้";
       deleteThumbBtn.disabled = pageOrder.length <= 1;
       deleteThumbBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
       deleteThumbBtn.addEventListener("click", (e) => {
@@ -3651,9 +3929,22 @@
       findModal.hidden = true;
       return;
     }
+    if (e.key === "Escape" && !passwordModal.hidden) {
+      passwordModal.hidden = true;
+      return;
+    }
+    if (e.key === "Escape" && !ocrModal.hidden) {
+      ocrModal.hidden = true;
+      return;
+    }
+    if (e.key === "Escape" && !compareModal.hidden) {
+      compareModal.hidden = true;
+      return;
+    }
     // don't leak shortcuts into the canvas while any modal is open
     if (!refineModal.hidden || !signatureModal.hidden || !stampModal.hidden ||
-        !formFieldsModal.hidden || !findModal.hidden) return;
+        !formFieldsModal.hidden || !findModal.hidden || !passwordModal.hidden ||
+        !ocrModal.hidden || !compareModal.hidden) return;
 
     if (e.key === "Escape" && activeTool !== "select") {
       setActiveTool("select");
@@ -3696,7 +3987,7 @@
   // Shared image intake: paste, or drag-and-drop straight onto the canvas
   // ---------------------------------------------------------------------
   async function processIncomingImage(imageFile) {
-    setStatus("Removing background…", "loading");
+    setStatus("กำลังลบพื้นหลัง…", "loading");
     try {
       // Runs fully in the browser via WASM/ONNX Runtime Web. On the very
       // first call it fetches the (cached) AI model from IMG.LY's CDN.
@@ -3704,16 +3995,16 @@
         model: "isnet_quint8", // smallest/fastest quality tier (~40MB)
         progress: (key, current, total) => {
           const pct = total ? Math.round((current / total) * 100) : 0;
-          setStatus("Downloading model…", "loading", pct);
+          setStatus("กำลังดาวน์โหลดโมเดล…", "loading", pct);
         },
       });
       await addPastedImageLayer(imageFile, transparentBlob);
-      setStatus("Background removed", "success");
+      setStatus("ลบพื้นหลังสำเร็จ", "success");
       window.setTimeout(() => setStatus("", "idle"), 1800);
     } catch (err) {
       console.error(err);
-      setStatus("Background removal failed", "error");
-      alert("Background removal failed: " + err.message);
+      setStatus("ลบพื้นหลังไม่สำเร็จ", "error");
+      alert("ลบพื้นหลังไม่สำเร็จ: " + err.message);
     }
   }
 
@@ -3737,7 +4028,8 @@
   document.addEventListener("paste", async (event) => {
     if (!fabricCanvas) return; // no PDF loaded yet, nothing to paste onto
     if (!refineModal.hidden || !signatureModal.hidden || !stampModal.hidden ||
-        !formFieldsModal.hidden || !findModal.hidden) return; // don't interfere with an open modal
+        !formFieldsModal.hidden || !findModal.hidden || !passwordModal.hidden ||
+        !ocrModal.hidden || !compareModal.hidden) return; // don't interfere with an open modal
 
     const items = event.clipboardData?.items;
     if (!items) return;
@@ -4042,7 +4334,7 @@
   );
 
   sigTextInput.addEventListener("input", () => {
-    sigTypePreview.textContent = sigTextInput.value.trim() || "Your signature";
+    sigTypePreview.textContent = sigTextInput.value.trim() || "ลายเซ็นของคุณ";
   });
 
   function openSignatureModal() {
@@ -4131,7 +4423,7 @@
     if (records.length === 0) {
       const empty = document.createElement("div");
       empty.className = "image-lib-empty";
-      empty.textContent = "No saved images yet — paste or upload an image onto a page first, and it'll show up here so you can reuse it.";
+      empty.textContent = "ยังไม่มีรูปที่บันทึกไว้ — วางหรืออัปโหลดรูปลงในหน้าก่อน แล้วมันจะมาโผล่ที่นี่ให้ใช้ซ้ำได้";
       stampGrid.appendChild(empty);
       return;
     }
@@ -4142,7 +4434,7 @@
       const thumb = document.createElement("button");
       thumb.type = "button";
       thumb.className = "image-lib-thumb";
-      thumb.title = "Insert this image";
+      thumb.title = "แทรกรูปนี้";
 
       const img = document.createElement("img");
       img.src = url;
@@ -4152,7 +4444,7 @@
       const removeBtn = document.createElement("button");
       removeBtn.type = "button";
       removeBtn.className = "image-lib-thumb-remove";
-      removeBtn.title = "Remove from saved images";
+      removeBtn.title = "ลบออกจากรูปที่บันทึกไว้";
       removeBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
       removeBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
@@ -4557,11 +4849,11 @@
 
   saveBtn.addEventListener("click", async () => {
     if (!currentPdfFile) {
-      alert("Upload a PDF first.");
+      alert("กรุณาอัปโหลด PDF ก่อน");
       return;
     }
 
-    setStatus("Saving PDF…", "loading");
+    setStatus("กำลังบันทึก PDF…", "loading");
     saveBtn.disabled = true;
 
     try {
@@ -4570,12 +4862,12 @@
       downloadPdfBytes(outBytes, `${baseName}-edited.pdf`);
 
       hasUnsavedChanges = false;
-      setStatus("Saved — download started", "success");
+      setStatus("บันทึกแล้ว — เริ่มดาวน์โหลด", "success");
       window.setTimeout(() => setStatus("", "idle"), 2200);
     } catch (err) {
       console.error(err);
-      setStatus("Save failed", "error");
-      alert("Failed to save PDF: " + err.message);
+      setStatus("บันทึกไม่สำเร็จ", "error");
+      alert("บันทึก PDF ไม่สำเร็จ: " + err.message);
     } finally {
       updateSaveButtonState();
     }
@@ -4588,18 +4880,18 @@
   // ---------------------------------------------------------------------
   async function exportSinglePage(originalIndex) {
     if (!currentPdfFile) return;
-    setStatus("Exporting page…", "loading");
+    setStatus("กำลังส่งออกหน้า…", "loading");
     try {
       const outBytes = await buildEditedPdfBytes([originalIndex]);
       const baseName = currentPdfFile.name.replace(/\.pdf$/i, "");
       const position = pageOrder.indexOf(originalIndex);
       downloadPdfBytes(outBytes, `${baseName}-page${position + 1}.pdf`);
-      setStatus("Page exported", "success");
+      setStatus("ส่งออกหน้าสำเร็จ", "success");
       window.setTimeout(() => setStatus("", "idle"), 1800);
     } catch (err) {
       console.error(err);
-      setStatus("Export failed", "error");
-      alert("Failed to export this page: " + err.message);
+      setStatus("ส่งออกไม่สำเร็จ", "error");
+      alert("ส่งออกหน้านี้ไม่สำเร็จ: " + err.message);
     }
   }
 
@@ -4617,7 +4909,7 @@
     if (!file || file.type !== "application/pdf") return;
     if (!currentPdfFile) return;
 
-    setStatus("Merging PDFs…", "loading");
+    setStatus("กำลังรวมไฟล์ PDF…", "loading");
     mergeBtn.disabled = true;
     try {
       const editedBytes = await buildEditedPdfBytes(pageOrder);
@@ -4645,14 +4937,368 @@
         await renderPage(basePages.length);
         renderSidebar();
       }
-      setStatus(`Merged — ${incomingPages.length} page(s) added`, "success");
+      setStatus(`รวมไฟล์แล้ว — เพิ่ม ${incomingPages.length} หน้า`, "success");
       window.setTimeout(() => setStatus("", "idle"), 2400);
     } catch (err) {
       console.error(err);
-      setStatus("Merge failed", "error");
-      alert("Failed to merge that PDF: " + err.message);
+      setStatus("รวมไฟล์ไม่สำเร็จ", "error");
+      alert("ไม่สามารถรวมไฟล์ PDF นั้นได้: " + err.message);
     } finally {
       mergeBtn.disabled = false;
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // Password / encryption: bakes in current edits via buildEditedPdfBytes,
+  // re-loads those bytes, then calls pdfDoc.encrypt() — a method added by
+  // the pdf-lib-plus-encrypt fork used for the PDFDocument import above.
+  // This is real AES-128 "Standard security handler" encryption per the PDF
+  // spec (verified: pdf-lib itself refuses to re-open the output without an
+  // ignoreEncryption flag), not a cosmetic lock.
+  // ---------------------------------------------------------------------
+  protectBtn.addEventListener("click", () => {
+    if (!currentPdfFile) return;
+    userPasswordInput.value = "";
+    ownerPasswordInput.value = "";
+    permPrintingCheck.checked = true;
+    permCopyingCheck.checked = true;
+    permModifyingCheck.checked = false;
+    passwordStatus.textContent = "";
+    passwordModal.hidden = false;
+  });
+  closePasswordBtn.addEventListener("click", () => { passwordModal.hidden = true; });
+  cancelPasswordBtn.addEventListener("click", () => { passwordModal.hidden = true; });
+  passwordModal.addEventListener("click", (e) => {
+    if (e.target === passwordModal) passwordModal.hidden = true;
+  });
+
+  applyPasswordBtn.addEventListener("click", async () => {
+    const userPassword = userPasswordInput.value;
+    const ownerPassword = ownerPasswordInput.value;
+    if (!userPassword) {
+      passwordStatus.textContent = "กรุณาใส่รหัสผ่านสำหรับเปิดไฟล์";
+      return;
+    }
+    applyPasswordBtn.disabled = true;
+    passwordStatus.textContent = "กำลังเข้ารหัส…";
+    try {
+      const editedBytes = await buildEditedPdfBytes(pageOrder);
+      const outDoc = await PDFDocument.load(editedBytes);
+      await outDoc.encrypt({
+        userPassword,
+        ownerPassword: ownerPassword || undefined,
+        permissions: {
+          printing: permPrintingCheck.checked ? "highResolution" : false,
+          copying: permCopyingCheck.checked,
+          modifying: permModifyingCheck.checked,
+          annotating: permModifyingCheck.checked,
+          fillingForms: true,
+          contentAccessibility: true,
+          documentAssembly: permModifyingCheck.checked,
+        },
+      });
+      const encryptedBytes = await outDoc.save();
+      const baseName = currentPdfFile.name.replace(/\.pdf$/i, "");
+      downloadPdfBytes(encryptedBytes, `${baseName}-protected.pdf`);
+      passwordStatus.textContent = "";
+      passwordModal.hidden = true;
+      setStatus("ใส่รหัสผ่านสำเร็จ — เริ่มดาวน์โหลด", "success");
+      window.setTimeout(() => setStatus("", "idle"), 2200);
+    } catch (err) {
+      console.error(err);
+      passwordStatus.textContent = "ใส่รหัสผ่านไม่สำเร็จ: " + err.message;
+    } finally {
+      applyPasswordBtn.disabled = false;
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // OCR: render each page to a canvas, recognize words + bounding boxes via
+  // Tesseract.js (imported lazily — only fetched the first time this
+  // feature is actually used), then draw each recognized word back onto
+  // the page as invisible (opacity 0) text at a matching position/size.
+  // The page keeps looking exactly the same, but the text becomes
+  // selectable/searchable/copyable — the standard "searchable PDF" trick
+  // used by tools like ocrmypdf.
+  //
+  // Thai text needs a real Unicode font: pdf-lib's built-in standard fonts
+  // only support WinAnsi (Latin) encoding, so recognizing Thai characters
+  // and drawing them with a standard font would throw. Noto Sans Thai
+  // (already used for this app's own UI) is fetched + embedded via fontkit
+  // only when the Thai language option is picked; English-only stays on
+  // the built-in Helvetica font with no extra network fetch.
+  // ---------------------------------------------------------------------
+  let tesseractModulePromise = null;
+  function loadTesseract() {
+    if (!tesseractModulePromise) {
+      tesseractModulePromise = import("https://cdn.jsdelivr.net/npm/tesseract.js@6/dist/tesseract.esm.min.js");
+    }
+    return tesseractModulePromise;
+  }
+
+  function flattenOcrWords(pageData) {
+    const words = [];
+    (pageData.blocks || []).forEach((block) => {
+      (block.paragraphs || []).forEach((para) => {
+        (para.lines || []).forEach((line) => {
+          (line.words || []).forEach((word) => {
+            if (word.text && word.text.trim()) words.push(word);
+          });
+        });
+      });
+    });
+    return words;
+  }
+
+  ocrBtn.addEventListener("click", () => {
+    if (!currentPdfFile) return;
+    ocrProgressWrap.hidden = true;
+    ocrProgressFill.style.width = "0%";
+    ocrProgressText.textContent = "";
+    ocrModal.hidden = false;
+  });
+  closeOcrBtn.addEventListener("click", () => { ocrModal.hidden = true; });
+  cancelOcrBtn.addEventListener("click", () => { ocrModal.hidden = true; });
+  ocrModal.addEventListener("click", (e) => { if (e.target === ocrModal) ocrModal.hidden = true; });
+
+  startOcrBtn.addEventListener("click", async () => {
+    if (!currentPdfFile) return;
+    if (pageOrder.length > 25) {
+      const proceed = confirm(`เอกสารนี้มี ${pageOrder.length} หน้า การทำ OCR อาจใช้เวลาหลายนาที ต้องการดำเนินการต่อหรือไม่?`);
+      if (!proceed) return;
+    }
+
+    const langs = ocrLangSelect.value; // "eng+tha" | "eng" | "tha"
+    const needsThai = langs.includes("tha");
+
+    startOcrBtn.disabled = true;
+    cancelOcrBtn.disabled = true;
+    ocrLangSelect.disabled = true;
+    ocrProgressWrap.hidden = false;
+    ocrProgressText.textContent = "กำลังเตรียม OCR…";
+    ocrProgressFill.style.width = "0%";
+
+    let worker = null;
+    try {
+      const editedBytes = await buildEditedPdfBytes(pageOrder);
+      const outDoc = await PDFDocument.load(editedBytes.slice(0));
+      const ocrPdfDoc = await pdfjsLib.getDocument({ data: editedBytes.slice(0) }).promise;
+
+      let ocrFont;
+      if (needsThai) {
+        ocrProgressText.textContent = "กำลังโหลดฟอนต์ไทย…";
+        const fontkitModule = await import("https://esm.sh/@pdf-lib/fontkit@1.1.1");
+        outDoc.registerFontkit(fontkitModule.default || fontkitModule);
+        const fontBytes = await fetch(
+          "https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-thai@5.2.8/files/noto-sans-thai-thai-400-normal.woff"
+        ).then((r) => r.arrayBuffer());
+        ocrFont = await outDoc.embedFont(fontBytes, { subset: true });
+      } else {
+        ocrFont = await outDoc.embedFont(StandardFonts.Helvetica);
+      }
+
+      ocrProgressText.textContent = "กำลังโหลดโมเดลภาษา…";
+      const { createWorker } = await loadTesseract();
+      let currentOcrPageNum = 0; // read by the logger closure below
+      const worker_ = await createWorker(langs.split("+"), undefined, {
+        logger: (m) => {
+          if (m.status === "recognizing text" && typeof m.progress === "number") {
+            const overall = ((currentOcrPageNum - 1 + m.progress) / pageOrder.length) * 100;
+            ocrProgressFill.style.width = `${Math.max(0, overall).toFixed(0)}%`;
+          }
+        },
+      });
+      worker = worker_;
+
+      const outPages = outDoc.getPages();
+
+      for (let i = 0; i < pageOrder.length; i++) {
+        currentOcrPageNum = i + 1;
+        ocrProgressText.textContent = `กำลังอ่านข้อความหน้า ${i + 1} จาก ${pageOrder.length}…`;
+
+        const pdfjsPage = await ocrPdfDoc.getPage(i + 1);
+        const baseViewport = pdfjsPage.getViewport({ scale: 1 });
+        const scale = 1800 / baseViewport.width;
+        const viewport = pdfjsPage.getViewport({ scale });
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext("2d");
+        await pdfjsPage.render({ canvasContext: ctx, viewport }).promise;
+
+        const { data } = await worker.recognize(canvas, {}, { blocks: true });
+        const words = flattenOcrWords(data);
+
+        const pdfPage = outPages[i];
+        const { width: pageWidthPts, height: pageHeightPts } = pdfPage.getSize();
+        const scaleFactor = canvas.width / pageWidthPts;
+
+        for (const word of words) {
+          const { x0, y0, x1, y1 } = word.bbox;
+          const fontSize = Math.max(4, (y1 - y0) / scaleFactor);
+          const pdfX = x0 / scaleFactor;
+          const pdfY = pageHeightPts - (y1 / scaleFactor);
+          try {
+            pdfPage.drawText(word.text, {
+              x: pdfX,
+              y: pdfY,
+              size: fontSize,
+              font: ocrFont,
+              opacity: 0,
+            });
+          } catch (err) {
+            // A handful of glyphs (rare symbols, stray recognition noise)
+            // may not exist even in the embedded font — skip just that word
+            // rather than losing the whole page's OCR text over it.
+            console.warn("Skipped one OCR word (unencodable):", word.text, err.message);
+          }
+        }
+      }
+
+      await worker.terminate();
+      worker = null;
+
+      const outBytes = await outDoc.save();
+      const baseName = currentPdfFile.name.replace(/\.pdf$/i, "");
+      downloadPdfBytes(outBytes, `${baseName}-searchable.pdf`);
+
+      ocrModal.hidden = true;
+      setStatus("OCR สำเร็จ — เริ่มดาวน์โหลด", "success");
+      window.setTimeout(() => setStatus("", "idle"), 2400);
+    } catch (err) {
+      console.error(err);
+      ocrProgressText.textContent = "OCR ไม่สำเร็จ: " + err.message;
+    } finally {
+      if (worker) {
+        try { await worker.terminate(); } catch (_) { /* already gone */ }
+      }
+      startOcrBtn.disabled = false;
+      cancelOcrBtn.disabled = false;
+      ocrLangSelect.disabled = false;
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // Compare / diff: pick a second PDF, extract text per page from both via
+  // pdf.js getTextContent (same approach as the Find feature), then
+  // word-diff each page pair with jsdiff (Myers algorithm) and render
+  // additions/removals inline.
+  // ---------------------------------------------------------------------
+  let compareOtherFile = null;
+
+  async function extractAllPageText(pdfDoc) {
+    const pages = [];
+    for (let i = 1; i <= pdfDoc.numPages; i++) {
+      const page = await pdfDoc.getPage(i);
+      const content = await page.getTextContent();
+      pages.push(content.items.map((item) => item.str).join(" "));
+    }
+    return pages;
+  }
+
+  function resetCompareModal() {
+    compareOtherFile = null;
+    compareFileName.textContent = "";
+    compareStatus.textContent = "";
+    startCompareBtn.disabled = true;
+    comparePickPane.hidden = false;
+    compareResultsPane.hidden = true;
+    compareBackBtn.hidden = true;
+    compareFileInput.value = "";
+  }
+
+  compareBtn.addEventListener("click", () => {
+    if (!currentPdfFile) return;
+    resetCompareModal();
+    compareCurrentName.textContent = currentPdfFile.name;
+    compareModal.hidden = false;
+  });
+  closeCompareBtn.addEventListener("click", () => { compareModal.hidden = true; });
+  cancelCompareBtn.addEventListener("click", () => { compareModal.hidden = true; });
+  compareModal.addEventListener("click", (e) => { if (e.target === compareModal) compareModal.hidden = true; });
+  compareBackBtn.addEventListener("click", () => { resetCompareModal(); });
+
+  compareFileInput.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file || file.type !== "application/pdf") return;
+    compareOtherFile = file;
+    compareFileName.textContent = file.name;
+    startCompareBtn.disabled = false;
+    compareStatus.textContent = "";
+  });
+
+  startCompareBtn.addEventListener("click", async () => {
+    if (!currentPdfFile || !compareOtherFile) return;
+    startCompareBtn.disabled = true;
+    compareStatus.textContent = "กำลังเปรียบเทียบ…";
+    try {
+      const [{ diffWords }, bytesA, bytesB] = await Promise.all([
+        import("https://esm.sh/diff@5.2.0"),
+        currentPdfFile.arrayBuffer(),
+        compareOtherFile.arrayBuffer(),
+      ]);
+      const [docA, docB] = await Promise.all([
+        pdfjsLib.getDocument({ data: bytesA }).promise,
+        pdfjsLib.getDocument({ data: bytesB }).promise,
+      ]);
+      const [textsA, textsB] = await Promise.all([extractAllPageText(docA), extractAllPageText(docB)]);
+
+      const maxPages = Math.max(textsA.length, textsB.length);
+      let changedPages = 0;
+      let identicalPages = 0;
+      compareResultsList.innerHTML = "";
+
+      for (let i = 0; i < maxPages; i++) {
+        const a = textsA[i];
+        const b = textsB[i];
+        const block = document.createElement("div");
+        block.className = "compare-page-block";
+        const title = document.createElement("div");
+        title.className = "compare-page-title";
+        title.textContent = `หน้า ${i + 1}`;
+        block.appendChild(title);
+
+        const body = document.createElement("div");
+        body.className = "compare-page-text";
+
+        if (a === undefined) {
+          body.textContent = `มีเฉพาะในไฟล์ "${compareOtherFile.name}"`;
+          changedPages++;
+        } else if (b === undefined) {
+          body.textContent = `มีเฉพาะในไฟล์ "${currentPdfFile.name}"`;
+          changedPages++;
+        } else if (a.trim() === b.trim()) {
+          body.textContent = "เนื้อหาเหมือนกัน";
+          body.classList.add("compare-page-same");
+          identicalPages++;
+        } else {
+          changedPages++;
+          const parts = diffWords(a, b);
+          parts.forEach((part) => {
+            const span = document.createElement("span");
+            if (part.added) span.className = "diff-added";
+            else if (part.removed) span.className = "diff-removed";
+            span.textContent = part.value;
+            body.appendChild(span);
+          });
+        }
+        block.appendChild(body);
+        compareResultsList.appendChild(block);
+      }
+
+      compareSummary.textContent = maxPages === textsA.length && maxPages === textsB.length
+        ? `${maxPages} หน้า — เหมือนกัน ${identicalPages} หน้า, แตกต่าง ${changedPages} หน้า`
+        : `ไฟล์ A มี ${textsA.length} หน้า, ไฟล์ B มี ${textsB.length} หน้า — แตกต่าง/ไม่ตรงกัน ${changedPages} หน้า`;
+
+      comparePickPane.hidden = true;
+      compareResultsPane.hidden = false;
+      compareBackBtn.hidden = false;
+      compareStatus.textContent = "";
+    } catch (err) {
+      console.error(err);
+      compareStatus.textContent = "เปรียบเทียบไม่สำเร็จ: " + err.message;
+    } finally {
+      startCompareBtn.disabled = false;
     }
   });
 </script>

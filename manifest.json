@@ -1,7 +1,7 @@
 {
-  "name": "Cutout · PDF Background Remover",
+  "name": "Cutout · โปรแกรมแก้ไข PDF",
   "short_name": "Cutout PDF",
-  "description": "Edit PDFs, remove image backgrounds, and export — entirely in your browser. Installable and works offline after the first visit.",
+  "description": "แก้ไข PDF ลบพื้นหลังรูปภาพ และส่งออกไฟล์ — ทำงานในเบราว์เซอร์ทั้งหมด ติดตั้งได้และใช้งานออฟไลน์ได้หลังเปิดใช้งานครั้งแรก",
   "start_url": "./",
   "scope": "./",
   "id": "./",
