@@ -1077,6 +1077,9 @@
       <span class="divider"></span>
 
       <div class="toolbar-group">
+        <button class="icon-btn active" id="selectToolBtn" title="Select (click a shape to move/resize it, or press Escape)" type="button" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l7 17 2-7 7-2z"/></svg>
+        </button>
         <button class="icon-btn" id="penToolBtn" title="Pen" type="button" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
         </button>
@@ -1292,6 +1295,7 @@
   const textItalicBtn = document.getElementById("textItalicBtn");
   const textColorInput = document.getElementById("textColorInput");
 
+  const selectToolBtn = document.getElementById("selectToolBtn");
   const penToolBtn = document.getElementById("penToolBtn");
   const highlightToolBtn = document.getElementById("highlightToolBtn");
   const lineToolBtn = document.getElementById("lineToolBtn");
@@ -1365,7 +1369,7 @@
   // Drawing/annotation tools: "select" | "pen" | "highlight" | "line" | "arrow" | "rect" | "ellipse"
   let activeTool = "select";
   const toolButtons = {
-    pen: null, highlight: null, line: null, arrow: null, rect: null, ellipse: null,
+    select: null, pen: null, highlight: null, line: null, arrow: null, rect: null, ellipse: null,
   }; // filled in once the buttons are wired up below
   let shapeDragStart = null;  // canvas-pixel {x,y} where the current drag began
   let shapeDragObj = null;    // the in-progress fabric object being drawn
@@ -1687,7 +1691,7 @@
     }
     activeTool = "select";
     Object.values(toolButtons).forEach((btn) => btn.classList.remove("active"));
-    [penToolBtn, highlightToolBtn, lineToolBtn, arrowToolBtn, rectToolBtn, ellipseToolBtn, redactToolBtn,
+    [selectToolBtn, penToolBtn, highlightToolBtn, lineToolBtn, arrowToolBtn, rectToolBtn, ellipseToolBtn, redactToolBtn,
       strokeColorInput, strokeWidthSlider, signatureBtn, stampBtn,
       textFontSelect, textBoldBtn, textItalicBtn, textColorInput].forEach((el) => { el.disabled = true; });
     textBoldBtn.classList.remove("active");
@@ -1787,7 +1791,7 @@
     resetZoom();
     addTextBtn.disabled = false;
     uploadImageBtn.disabled = false;
-    [penToolBtn, highlightToolBtn, lineToolBtn, arrowToolBtn, rectToolBtn, ellipseToolBtn, redactToolBtn,
+    [selectToolBtn, penToolBtn, highlightToolBtn, lineToolBtn, arrowToolBtn, rectToolBtn, ellipseToolBtn, redactToolBtn,
       strokeColorInput, strokeWidthSlider, signatureBtn, stampBtn,
       textFontSelect, textBoldBtn, textItalicBtn, textColorInput].forEach((el) => { el.disabled = false; });
     setActiveTool("select"); // drawing tools always reset when switching pages
@@ -2064,6 +2068,7 @@
   // toggled off, matching most PDF annotators) and reset to "select"
   // whenever the page changes.
   // ---------------------------------------------------------------------
+  toolButtons.select = selectToolBtn;
   toolButtons.pen = penToolBtn;
   toolButtons.highlight = highlightToolBtn;
   toolButtons.line = lineToolBtn;
@@ -2223,10 +2228,14 @@
     shapeDragObj = null;
     shapeDragStart = null;
 
-    // Drop degenerate shapes from a plain click (no real drag).
-    const tooSmall = (obj.width !== undefined && obj.width < 3 && obj.height < 3)
-      || (obj.rx !== undefined && obj.rx < 3 && obj.ry < 3)
-      || (obj.__layerKind === "path" && obj.width < 3 && obj.height < 3);
+    // Drop degenerate shapes from a plain click (no real drag). Branch on
+    // __layerKind explicitly rather than "does this object happen to have
+    // an rx property" — fabric.Rect ALSO defines rx/ry (they default to 0,
+    // for square corners), so that used to match every rectangle too and
+    // delete it immediately regardless of how big it was actually dragged.
+    const tooSmall = obj.__layerKind === "ellipse"
+      ? (obj.rx < 3 && obj.ry < 3)
+      : (obj.width < 3 && obj.height < 3);
     if (tooSmall) {
       fabricCanvas.remove(obj);
       return;
