@@ -877,29 +877,62 @@
 
   .stamp-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 12px;
   }
-  .stamp-preset-btn {
+  .image-lib-thumb {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px 10px;
+    aspect-ratio: 1;
+    padding: 8px;
     border-radius: 10px;
     border: 2px solid var(--border-subtle);
-    background: var(--surface-2);
+    background-color: var(--surface-2);
+    background-image:
+      linear-gradient(45deg, var(--border-subtle) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--border-subtle) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--border-subtle) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--border-subtle) 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
     cursor: pointer;
-    transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
+    transition: border-color 0.15s var(--ease);
   }
-  .stamp-preset-btn:hover { background: var(--surface); border-color: var(--accent); }
-  .stamp-preset-label {
-    font-weight: 800;
-    font-size: 15px;
-    letter-spacing: 0.05em;
-    padding: 8px 16px;
-    border: 3px solid currentColor;
-    border-radius: 6px;
-    transform: rotate(-6deg);
+  .image-lib-thumb:hover { border-color: var(--accent); }
+  .image-lib-thumb img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+  .image-lib-thumb-remove {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: none;
+    background: oklch(16% 0.015 250 / 75%);
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s var(--ease), color 0.15s var(--ease), background 0.15s var(--ease);
+  }
+  .image-lib-thumb-remove svg { width: 12px; height: 12px; }
+  .image-lib-thumb:hover .image-lib-thumb-remove { opacity: 1; }
+  .image-lib-thumb-remove:hover { color: var(--danger); background: oklch(16% 0.015 250 / 90%); }
+  .image-lib-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--muted);
+    font-size: 13.5px;
+    line-height: 1.6;
   }
 
   .modal-footer {
@@ -1111,8 +1144,8 @@
         <button class="icon-btn" id="signatureBtn" title="Add signature" type="button" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c2-4 4 4 6 0s3-8 5-4 3 6 5 2"/><path d="M3 21h18"/></svg>
         </button>
-        <button class="icon-btn" id="stampBtn" title="Add stamp" type="button" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="11" rx="1.5"/><path d="M9 20h6"/><path d="M12 15v5"/></svg>
+        <button class="icon-btn" id="stampBtn" title="Insert a previously uploaded image" type="button" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="13" height="13" rx="2"/><path d="M8 21h10a2 2 0 0 0 2-2V9"/><circle cx="7.5" cy="7.5" r="1.5"/><path d="M3 13l3-3 5 5"/></svg>
         </button>
       </div>
 
@@ -1226,11 +1259,12 @@
   </div>
 </div>
 
-<!-- Stamp modal: pick a preset label, rendered to an image layer -->
-<div id="stampModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Add stamp" hidden>
+<!-- Saved-images modal: re-insert a previously pasted/uploaded image without
+     having to find and upload the file again. -->
+<div id="stampModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Insert a saved image" hidden>
   <div class="modal-panel">
     <div class="modal-header">
-      <h3>Add stamp</h3>
+      <h3>Your uploaded images</h3>
       <button class="icon-btn" id="closeStampBtn" title="Close" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -1587,12 +1621,23 @@
   // ---------------------------------------------------------------------
   const RECENT_DB_NAME = "cutout-pdf-editor";
   const RECENT_STORE_NAME = "lastFile";
+  const IMAGE_LIBRARY_STORE_NAME = "imageLibrary";
+  const IMAGE_LIBRARY_MAX = 30; // cap so the local database doesn't grow forever
 
   function openRecentDb() {
     return new Promise((resolve, reject) => {
-      const req = indexedDB.open(RECENT_DB_NAME, 1);
+      const req = indexedDB.open(RECENT_DB_NAME, 2);
       req.onupgradeneeded = () => {
-        req.result.createObjectStore(RECENT_STORE_NAME);
+        const db = req.result;
+        // Guard each store with a contains() check: onupgradeneeded also
+        // fires for existing users upgrading from version 1 -> 2, and
+        // re-creating a store that already exists throws.
+        if (!db.objectStoreNames.contains(RECENT_STORE_NAME)) {
+          db.createObjectStore(RECENT_STORE_NAME);
+        }
+        if (!db.objectStoreNames.contains(IMAGE_LIBRARY_STORE_NAME)) {
+          db.createObjectStore(IMAGE_LIBRARY_STORE_NAME, { keyPath: "id", autoIncrement: true });
+        }
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -1639,6 +1684,78 @@
       });
     } catch (err) {
       // Nothing to do — worst case the banner just won't disappear until reload.
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Remember every uploaded/pasted image locally too (separate store from
+  // the PDF above), so a logo/signature/photo used once can be re-inserted
+  // later via the "insert saved image" picker instead of re-uploading or
+  // re-pasting it. Saved automatically whenever an image is added to the
+  // canvas — no explicit "save" step for the person to remember.
+  // ---------------------------------------------------------------------
+  async function saveImageToLibrary(blob) {
+    try {
+      const db = await openRecentDb();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(IMAGE_LIBRARY_STORE_NAME, "readwrite");
+        tx.objectStore(IMAGE_LIBRARY_STORE_NAME).add({ blob, addedAt: Date.now() });
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+      await pruneImageLibrary();
+    } catch (err) {
+      console.warn("Could not save this image for reuse:", err);
+    }
+  }
+
+  async function pruneImageLibrary() {
+    // Keep only the most recent IMAGE_LIBRARY_MAX images so this doesn't
+    // grow the local database without bound the longer the app is used.
+    try {
+      const db = await openRecentDb();
+      const all = await new Promise((resolve, reject) => {
+        const tx = db.transaction(IMAGE_LIBRARY_STORE_NAME, "readonly");
+        const req = tx.objectStore(IMAGE_LIBRARY_STORE_NAME).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+      if (all.length <= IMAGE_LIBRARY_MAX) return;
+      const toDelete = all.sort((a, b) => a.addedAt - b.addedAt).slice(0, all.length - IMAGE_LIBRARY_MAX);
+      const tx = db.transaction(IMAGE_LIBRARY_STORE_NAME, "readwrite");
+      const store = tx.objectStore(IMAGE_LIBRARY_STORE_NAME);
+      toDelete.forEach((rec) => store.delete(rec.id));
+    } catch (err) {
+      // Best effort — worst case the library just grows a bit past the cap.
+    }
+  }
+
+  async function getImageLibrary() {
+    try {
+      const db = await openRecentDb();
+      const all = await new Promise((resolve, reject) => {
+        const tx = db.transaction(IMAGE_LIBRARY_STORE_NAME, "readonly");
+        const req = tx.objectStore(IMAGE_LIBRARY_STORE_NAME).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+      return all.sort((a, b) => b.addedAt - a.addedAt); // newest first
+    } catch (err) {
+      return [];
+    }
+  }
+
+  async function deleteImageFromLibrary(id) {
+    try {
+      const db = await openRecentDb();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(IMAGE_LIBRARY_STORE_NAME, "readwrite");
+        tx.objectStore(IMAGE_LIBRARY_STORE_NAME).delete(id);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    } catch (err) {
+      // Best effort — worst case the thumbnail reappears until next prune.
     }
   }
 
@@ -2811,6 +2928,11 @@
         updateSelectionButtons();
         resolve(img);
         // object:added fires -> pushHistorySnapshot / paste-hint / save-button handled centrally
+
+        // Fire-and-forget: remember this image for the "insert saved image"
+        // picker. Doesn't block the canvas from updating, and a failure
+        // here (e.g. storage quota) shouldn't interrupt the paste itself.
+        saveImageToLibrary(transparentBlob);
       });
     });
   }
@@ -3113,66 +3235,71 @@
   });
 
   // ---------------------------------------------------------------------
-  // Stamps — preset labels rendered to a flat PNG (border + bold text),
-  // inserted the same way as a signature. Kept un-rotated in the exported
-  // image itself; the tilt in the picker button is a CSS-only preview.
+  // Saved images — re-insert anything previously pasted/uploaded (photos,
+  // logos, signatures) straight from a local library instead of having to
+  // find and upload the same file again. Populated automatically by
+  // saveImageToLibrary() every time an image lands on the canvas; the grid
+  // itself is (re)rendered fresh each time the modal opens, since the
+  // library can change between visits (new images added, old ones removed).
   // ---------------------------------------------------------------------
-  const STAMP_PRESETS = [
-    { label: "APPROVED", color: "#1b8a5a" },
-    { label: "REJECTED", color: "#c62828" },
-    { label: "DRAFT", color: "#616161" },
-    { label: "CONFIDENTIAL", color: "#6a1b9a" },
-    { label: "PAID", color: "#1565c0" },
-    { label: "URGENT", color: "#e65100" },
-  ];
-
-  function renderStampToBlob(label, color) {
-    const canvas = document.createElement("canvas");
-    canvas.width = 420;
-    canvas.height = 150;
-    const ctx = canvas.getContext("2d");
-    const borderWidth = 8;
-    const inset = borderWidth / 2 + 4;
-
-    ctx.strokeStyle = color;
-    ctx.lineWidth = borderWidth;
-    ctx.strokeRect(inset, inset, canvas.width - inset * 2, canvas.height - inset * 2);
-
-    ctx.fillStyle = color;
-    ctx.font = "800 52px Inter, Arial, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(label, canvas.width / 2, canvas.height / 2, canvas.width - inset * 2 - 24);
-
-    return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-  }
-
-  function renderStampGrid() {
+  let imageLibraryObjectUrls = [];
+  async function renderImageLibraryGrid() {
+    const records = await getImageLibrary();
+    // Revoke the previous render's blob URLs before building new ones —
+    // innerHTML="" below drops the <img> elements but does NOT revoke the
+    // object URLs they pointed to, which would otherwise leak a little
+    // more memory every time the modal is reopened.
+    imageLibraryObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+    imageLibraryObjectUrls = [];
     stampGrid.innerHTML = "";
-    STAMP_PRESETS.forEach((preset) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "stamp-preset-btn";
-      const span = document.createElement("span");
-      span.className = "stamp-preset-label";
-      span.textContent = preset.label;
-      span.style.color = preset.color;
-      btn.appendChild(span);
-      btn.addEventListener("click", async () => {
+
+    if (records.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "image-lib-empty";
+      empty.textContent = "No saved images yet — paste or upload an image onto a page first, and it'll show up here so you can reuse it.";
+      stampGrid.appendChild(empty);
+      return;
+    }
+
+    records.forEach((record) => {
+      const url = URL.createObjectURL(record.blob);
+      imageLibraryObjectUrls.push(url);
+      const thumb = document.createElement("button");
+      thumb.type = "button";
+      thumb.className = "image-lib-thumb";
+      thumb.title = "Insert this image";
+
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = "";
+      thumb.appendChild(img);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "image-lib-thumb-remove";
+      removeBtn.title = "Remove from saved images";
+      removeBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+      removeBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        await deleteImageFromLibrary(record.id);
+        renderImageLibraryGrid();
+      });
+      thumb.appendChild(removeBtn);
+
+      thumb.addEventListener("click", async () => {
         if (!fabricCanvas) return;
-        const blob = await renderStampToBlob(preset.label, preset.color);
-        if (!blob) return;
-        await addRawImageLayer(blob, { maxDimRatio: 0.3 });
+        await addRawImageLayer(record.blob, { maxDimRatio: 0.4 });
         closeStampModal();
       });
-      stampGrid.appendChild(btn);
+
+      stampGrid.appendChild(thumb);
     });
   }
-  renderStampGrid();
 
   function openStampModal() {
     if (!fabricCanvas) return;
     stampModal.hidden = false;
+    renderImageLibraryGrid();
   }
   function closeStampModal() {
     stampModal.hidden = true;
