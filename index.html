@@ -963,7 +963,7 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M7 9l5-5 5 5"/><path d="M12 4v12"/></svg>
     Upload PDF
   </label>
-  <input type="file" id="pdfInput" accept="application/pdf" />
+  <input type="file" id="pdfInput" accept="application/pdf" multiple />
 
   <button class="btn secondary" id="mergeBtn" title="Add another PDF's pages to the end of this one" type="button" disabled>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="12" height="15" rx="2"/><path d="M9 12h9M18 12l-3-3M18 12l-3 3"/></svg>
@@ -1600,9 +1600,50 @@
     }
   }
 
+  // Combines several PDF files into one, in the order given — used when the
+  // person selects/drops more than one file at once (either at the very
+  // start, via "Upload PDF", or onto the empty-state dropzone). Each file's
+  // pages are copied in as-is; any in-canvas edits only exist once a file is
+  // the single *working* document, so there's nothing to bake in here yet
+  // (unlike the "Merge PDF" button, which merges into an already-open,
+  // already-edited document via buildEditedPdfBytes instead).
+  async function combinePdfFiles(files) {
+    const combinedDoc = await PDFDocument.create();
+    for (const file of files) {
+      const bytes = await file.arrayBuffer();
+      const doc = await PDFDocument.load(bytes);
+      const pages = await combinedDoc.copyPages(doc, doc.getPageIndices());
+      pages.forEach((p) => combinedDoc.addPage(p));
+    }
+    const combinedBytes = await combinedDoc.save();
+    return new File([combinedBytes], "merged.pdf", { type: "application/pdf" });
+  }
+
+  async function loadPdfFiles(fileList) {
+    const allFiles = Array.from(fileList || []);
+    if (allFiles.length === 0) return;
+    if (allFiles.length === 1) {
+      await loadPdfFile(allFiles[0]); // unchanged single-file path, including its own "not a PDF" alert
+      return;
+    }
+    const pdfFiles = allFiles.filter((f) => f.type === "application/pdf");
+    if (pdfFiles.length === 0) {
+      alert("Please choose PDF files.");
+      return;
+    }
+    setStatus(`Combining ${pdfFiles.length} PDFs…`, "loading");
+    try {
+      const merged = await combinePdfFiles(pdfFiles);
+      await loadPdfFile(merged);
+    } catch (err) {
+      console.error(err);
+      setStatus("Failed to combine PDFs", "error");
+      alert("Could not combine those PDFs: " + err.message);
+    }
+  }
+
   pdfInput.addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (file) loadPdfFile(file);
+    loadPdfFiles(e.target.files);
   });
 
   ["dragenter", "dragover"].forEach((evt) =>
@@ -1618,8 +1659,7 @@
     })
   );
   dropzone.addEventListener("drop", (e) => {
-    const file = e.dataTransfer?.files?.[0];
-    if (file) loadPdfFile(file);
+    loadPdfFiles(e.dataTransfer?.files);
   });
 
   // ---------------------------------------------------------------------
