@@ -353,10 +353,21 @@
   }
 
   /* Dropzone / empty state ------------------------------------------ */
+  .dropzone-layout {
+    display: flex;
+    align-items: stretch;
+    gap: 20px;
+    width: 100%;
+    max-width: 980px;
+    margin: auto; /* centers both axes inside the flex <main> */
+  }
+  @media (max-width: 860px) {
+    .dropzone-layout { flex-direction: column; }
+  }
+
   .dropzone {
     width: 100%;
-    max-width: 620px;
-    margin: auto; /* centers both axes inside the flex <main> */
+    flex: 1 1 460px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -370,6 +381,44 @@
   .dropzone.dragover {
     border-color: var(--accent);
     background: var(--accent-wash);
+  }
+
+  /* Right column: a preview of the full toolkit, echoing the reference's
+     two-column empty state without copying its exact card contents/copy. */
+  .dropzone-toolkit-panel {
+    flex: 1 1 420px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 28px 26px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 16px;
+    background: var(--surface);
+  }
+  .dropzone-toolkit-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    text-align: left;
+  }
+  .dropzone-toolkit-badge {
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    display: grid;
+    place-items: center;
+  }
+  .dropzone-toolkit-badge svg { width: 18px; height: 18px; }
+  .dropzone-toolkit-header h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+  .dropzone-toolkit-header p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+  .dropzone-toolkit-grid {
+    max-height: 340px;
+    overflow-y: auto;
+    padding-right: 2px;
   }
 
   .dropzone-icon {
@@ -1718,7 +1767,11 @@
 </aside>
 
 <main>
-  <!-- Empty state: drag-and-drop zone -->
+  <!-- Empty state: two columns, like the reference — upload on the left,
+       a preview of every tool in the app on the right (most cards stay
+       disabled until a file is loaded, same as the ribbon itself; this is
+       a preview of what's available, not a second way to skip uploading). -->
+  <div id="dropzoneLayout" class="dropzone-layout">
   <div id="dropzone" class="dropzone">
     <div class="dropzone-icon">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M15 3v5h5"/></svg>
@@ -1765,6 +1818,22 @@
         <span class="step-label">จัดวาง ปรับแต่ง แล้วส่งออก</span>
       </div>
     </div>
+  </div>
+
+  <div class="dropzone-toolkit-panel">
+    <div class="dropzone-toolkit-header">
+      <span class="dropzone-toolkit-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>
+      </span>
+      <div>
+        <h3>เครื่องมือทั้งหมด</h3>
+        <p>ประมวลผลไฟล์ในเบราว์เซอร์ทันทีด้วยเครื่องมือ PDF ครบชุด — อัปโหลดไฟล์ก่อนเพื่อเริ่มใช้งาน</p>
+      </div>
+    </div>
+    <!-- Same TOOLKIT_SECTIONS data + renderToolkitGrid() as the modal grid
+         above, just rendered into a different container. -->
+    <div id="dropzoneToolkitGrid" class="toolkit-grid dropzone-toolkit-grid"></div>
+  </div>
   </div>
 
   <!-- Editor: PDF canvas + Fabric.js overlay -->
@@ -2072,121 +2141,10 @@
     </div>
     <div class="refine-body">
       <input type="text" id="toolkitSearchInput" class="sig-text-input" placeholder="ค้นหาเครื่องมือ…" autocomplete="off" style="margin-bottom:0;" />
-      <div id="toolkitGrid" class="toolkit-grid">
-        <div class="toolkit-section" data-section="ประวัติ">
-          <span class="ribbon-group-caption">ประวัติ</span>
-          <div class="toolkit-cards">
-            <button class="toolkit-card" type="button" data-btn="undoBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-              <span class="toolkit-card-title">เลิกทำ</span>
-            </button>
-            <button class="toolkit-card" type="button" data-btn="redoBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-              <span class="toolkit-card-title">ทำซ้ำ</span>
-            </button>
-          </div>
-        </div>
-
-        <div class="toolkit-section" data-section="ไฟล์">
-          <span class="ribbon-group-caption">ไฟล์</span>
-          <div class="toolkit-cards">
-            <button class="toolkit-card" type="button" data-btn="pdfInput">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M7 9l5-5 5 5"/><path d="M12 4v12"/></svg>
-              <span class="toolkit-card-title">อัปโหลด PDF</span>
-            </button>
-            <button class="toolkit-card" type="button" data-btn="mergeBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="12" height="15" rx="2"/><path d="M9 12h9M18 12l-3-3M18 12l-3 3"/></svg>
-              <span class="toolkit-card-title">รวมไฟล์ PDF</span>
-            </button>
-            <button class="toolkit-card" type="button" data-btn="startOverBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/></svg>
-              <span class="toolkit-card-title">เริ่มใหม่</span>
-            </button>
-          </div>
-        </div>
-
-        <div class="toolkit-section" data-section="ค้นหา">
-          <span class="ribbon-group-caption">ค้นหา</span>
-          <div class="toolkit-cards">
-            <button class="toolkit-card" type="button" data-btn="findBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <span class="toolkit-card-title">ค้นหาข้อความ</span>
-            </button>
-          </div>
-        </div>
-
-        <div class="toolkit-section" data-section="เนื้อหา">
-          <span class="ribbon-group-caption">เนื้อหา</span>
-          <div class="toolkit-cards">
-            <button class="toolkit-card" type="button" data-btn="addTextBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
-              <span class="toolkit-card-title">เพิ่มข้อความ</span>
-            </button>
-            <button class="toolkit-card" type="button" data-btn="uploadImageBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-              <span class="toolkit-card-title">เพิ่มรูปภาพ</span>
-            </button>
-            <button class="toolkit-card" type="button" data-btn="duplicateBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              <span class="toolkit-card-title">ทำสำเนา</span>
-            </button>
-            <button class="toolkit-card" type="button" data-btn="refineBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.06 11.9l8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></svg>
-              <span class="toolkit-card-title">ปรับขอบภาพ</span>
-            </button>
-          </div>
-        </div>
-
-        <div class="toolkit-section" data-section="จัดเรียงและวาด">
-          <span class="ribbon-group-caption">จัดเรียงและวาด</span>
-          <div class="toolkit-cards">
-            <button class="toolkit-card" type="button" data-tab="edit">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="3" x2="12" y2="21"/><rect x="6" y="6" width="12" height="4"/><rect x="8.5" y="14" width="7" height="4"/></svg>
-              <span class="toolkit-card-title">จัดเรียงวัตถุ</span>
-            </button>
-            <button class="toolkit-card" type="button" data-tab="draw">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
-              <span class="toolkit-card-title">เครื่องมือวาด/รูปทรง</span>
-            </button>
-          </div>
-        </div>
-
-        <div class="toolkit-section" data-section="ฟอร์มและลายเซ็น">
-          <span class="ribbon-group-caption">ฟอร์มและลายเซ็น</span>
-          <div class="toolkit-cards">
-            <button class="toolkit-card" type="button" data-btn="formFieldsBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="13" y2="13"/></svg>
-              <span class="toolkit-card-title">กรอกฟอร์ม</span>
-            </button>
-            <button class="toolkit-card" type="button" data-btn="signatureBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c2-4 4 4 6 0s3-8 5-4 3 6 5 2"/><path d="M3 21h18"/></svg>
-              <span class="toolkit-card-title">ลายเซ็น</span>
-            </button>
-            <button class="toolkit-card" type="button" data-btn="stampBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="13" height="13" rx="2"/><path d="M8 21h10a2 2 0 0 0 2-2V9"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
-              <span class="toolkit-card-title">รูปที่บันทึกไว้</span>
-            </button>
-          </div>
-        </div>
-
-        <div class="toolkit-section" data-section="เครื่องมือ">
-          <span class="ribbon-group-caption">รหัสผ่าน · OCR · เปรียบเทียบ</span>
-          <div class="toolkit-cards">
-            <button class="toolkit-card" type="button" data-btn="protectBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              <span class="toolkit-card-title">ใส่รหัสผ่าน</span>
-            </button>
-            <button class="toolkit-card" type="button" data-btn="ocrBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="7" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="14" y2="12"/><line x1="7" y1="16" x2="11" y2="16"/></svg>
-              <span class="toolkit-card-title">OCR ข้อความค้นหาได้</span>
-            </button>
-            <button class="toolkit-card" type="button" data-btn="compareBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="9" height="16" rx="1.5"/><rect x="13" y="4" width="9" height="16" rx="1.5"/></svg>
-              <span class="toolkit-card-title">เปรียบเทียบ PDF</span>
-            </button>
-          </div>
-        </div>
-      </div>
+      <!-- Populated by renderToolkitGrid() in the module script below, from
+           the single TOOLKIT_SECTIONS data source it shares with the
+           dropzone's inline toolkit panel — one list, two renderings. -->
+      <div id="toolkitGrid" class="toolkit-grid"></div>
       <p id="toolkitEmpty" class="find-status" hidden>ไม่พบเครื่องมือที่ตรงกับคำค้นหา</p>
     </div>
   </div>
@@ -2218,6 +2176,7 @@
   const saveBtn = document.getElementById("saveBtn");
   const statusPill = document.getElementById("statusPill");
   const dropzone = document.getElementById("dropzone");
+  const dropzoneLayout = document.getElementById("dropzoneLayout"); // wraps dropzone + the inline toolkit panel
   const editorArea = document.getElementById("editorArea");
   const pasteHint = document.getElementById("pasteHint");
   const fileNameLabel = document.getElementById("fileNameLabel");
@@ -2357,6 +2316,7 @@
   const toolkitSearchInput = document.getElementById("toolkitSearchInput");
   const toolkitGrid = document.getElementById("toolkitGrid");
   const toolkitEmpty = document.getElementById("toolkitEmpty");
+  const dropzoneToolkitGrid = document.getElementById("dropzoneToolkitGrid");
 
   const alignLeftBtn = document.getElementById("alignLeftBtn");
   const alignHCenterBtn = document.getElementById("alignHCenterBtn");
@@ -2587,7 +2547,7 @@
 
       await renderPage(0);
 
-      dropzone.style.display = "none";
+      dropzoneLayout.style.display = "none";
       editorArea.classList.add("visible");
       fileNameLabel.textContent = file.name;
       setStatus("โหลด PDF สำเร็จ", "success");
@@ -3148,7 +3108,7 @@
 
   startOverBtn.addEventListener("click", () => {
     editorArea.classList.remove("visible");
-    dropzone.style.display = "flex";
+    dropzoneLayout.style.display = "flex";
     pdfInput.value = "";
     currentPdfFile = null;
     pdfProxy = null;
@@ -5687,9 +5647,79 @@
 
   // ---------------------------------------------------------------------
   // Toolkit browser: a searchable grid of every tool in the app, grouped
-  // like the ribbon. Cards delegate to the real button/tab behind them
-  // rather than duplicating any logic.
+  // like the ribbon. One data source renders into BOTH the modal grid and
+  // the dropzone's inline preview panel, so the two can never drift apart.
+  // Cards delegate to the real button/tab behind them rather than
+  // duplicating any logic — a disabled real button just no-ops on .click().
   // ---------------------------------------------------------------------
+  const TOOLKIT_SECTIONS = [
+    { caption: "ประวัติ", section: "ประวัติ", cards: [
+      { btn: "undoBtn", title: "เลิกทำ", icon: '<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>' },
+      { btn: "redoBtn", title: "ทำซ้ำ", icon: '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>' },
+    ] },
+    { caption: "ไฟล์", section: "ไฟล์", cards: [
+      { btn: "pdfInput", title: "อัปโหลด PDF", icon: '<path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M7 9l5-5 5 5"/><path d="M12 4v12"/>' },
+      { btn: "mergeBtn", title: "รวมไฟล์ PDF", icon: '<rect x="3" y="3" width="12" height="15" rx="2"/><path d="M9 12h9M18 12l-3-3M18 12l-3 3"/>' },
+      { btn: "startOverBtn", title: "เริ่มใหม่", icon: '<path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/>' },
+    ] },
+    { caption: "ค้นหา", section: "ค้นหา", cards: [
+      { btn: "findBtn", title: "ค้นหาข้อความ", icon: '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>' },
+    ] },
+    { caption: "เนื้อหา", section: "เนื้อหา", cards: [
+      { btn: "addTextBtn", title: "เพิ่มข้อความ", icon: '<polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/>' },
+      { btn: "uploadImageBtn", title: "เพิ่มรูปภาพ", icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>' },
+      { btn: "duplicateBtn", title: "ทำสำเนา", icon: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>' },
+      { btn: "refineBtn", title: "ปรับขอบภาพ", icon: '<path d="M9.06 11.9l8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/>' },
+    ] },
+    { caption: "จัดเรียงและวาด", section: "จัดเรียงและวาด", cards: [
+      { tab: "edit", title: "จัดเรียงวัตถุ", icon: '<line x1="12" y1="3" x2="12" y2="21"/><rect x="6" y="6" width="12" height="4"/><rect x="8.5" y="14" width="7" height="4"/>' },
+      { tab: "draw", title: "เครื่องมือวาด/รูปทรง", icon: '<path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>' },
+    ] },
+    { caption: "ฟอร์มและลายเซ็น", section: "ฟอร์มและลายเซ็น", cards: [
+      { btn: "formFieldsBtn", title: "กรอกฟอร์ม", icon: '<rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="13" y2="13"/>' },
+      { btn: "signatureBtn", title: "ลายเซ็น", icon: '<path d="M3 17c2-4 4 4 6 0s3-8 5-4 3 6 5 2"/><path d="M3 21h18"/>' },
+      { btn: "stampBtn", title: "รูปที่บันทึกไว้", icon: '<rect x="3" y="3" width="13" height="13" rx="2"/><path d="M8 21h10a2 2 0 0 0 2-2V9"/><circle cx="7.5" cy="7.5" r="1.5"/>' },
+    ] },
+    { caption: "รหัสผ่าน · OCR · เปรียบเทียบ", section: "เครื่องมือ", cards: [
+      { btn: "protectBtn", title: "ใส่รหัสผ่าน", icon: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>' },
+      { btn: "ocrBtn", title: "OCR ข้อความค้นหาได้", icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="7" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="14" y2="12"/><line x1="7" y1="16" x2="11" y2="16"/>' },
+      { btn: "compareBtn", title: "เปรียบเทียบ PDF", icon: '<rect x="2" y="4" width="9" height="16" rx="1.5"/><rect x="13" y="4" width="9" height="16" rx="1.5"/>' },
+    ] },
+  ];
+
+  function renderToolkitGrid(container) {
+    container.innerHTML = "";
+    TOOLKIT_SECTIONS.forEach((section) => {
+      const sectionEl = document.createElement("div");
+      sectionEl.className = "toolkit-section";
+      sectionEl.dataset.section = section.section;
+
+      const caption = document.createElement("span");
+      caption.className = "ribbon-group-caption";
+      caption.textContent = section.caption;
+      sectionEl.appendChild(caption);
+
+      const cardsEl = document.createElement("div");
+      cardsEl.className = "toolkit-cards";
+      section.cards.forEach((card) => {
+        const btnEl = document.createElement("button");
+        btnEl.type = "button";
+        btnEl.className = "toolkit-card";
+        if (card.btn) btnEl.dataset.btn = card.btn;
+        if (card.tab) btnEl.dataset.tab = card.tab;
+        btnEl.innerHTML =
+          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${card.icon}</svg>` +
+          `<span class="toolkit-card-title">${card.title}</span>`;
+        cardsEl.appendChild(btnEl);
+      });
+      sectionEl.appendChild(cardsEl);
+      container.appendChild(sectionEl);
+    });
+  }
+
+  renderToolkitGrid(toolkitGrid);
+  renderToolkitGrid(dropzoneToolkitGrid);
+
   function filterToolkitCards(query) {
     const q = query.trim().toLowerCase();
     let anyVisible = false;
@@ -5711,7 +5741,7 @@
   toolkitModal.addEventListener("click", (e) => { if (e.target === toolkitModal) toolkitModal.hidden = true; });
   toolkitSearchInput.addEventListener("input", () => filterToolkitCards(toolkitSearchInput.value));
 
-  toolkitGrid.addEventListener("click", (e) => {
+  function handleToolkitCardClick(e) {
     const card = e.target.closest(".toolkit-card");
     if (!card) return;
     if (card.dataset.btn) {
@@ -5720,8 +5750,10 @@
     } else if (card.dataset.tab) {
       setRibbonTab(card.dataset.tab);
     }
-    toolkitModal.hidden = true;
-  });
+    toolkitModal.hidden = true; // harmless no-op if this click came from the dropzone panel, which was never a modal
+  }
+  toolkitGrid.addEventListener("click", handleToolkitCardClick);
+  dropzoneToolkitGrid.addEventListener("click", handleToolkitCardClick);
 </script>
 
 <script>
