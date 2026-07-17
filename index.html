@@ -1535,11 +1535,11 @@
             <span>อัปโหลด</span>
           </label>
           <input type="file" id="pdfInput" accept="application/pdf" multiple />
-          <button class="ribbon-btn" id="mergeBtn" title="เพิ่มหน้าจากไฟล์ PDF อื่นต่อท้ายไฟล์นี้" type="button" disabled>
+          <button class="ribbon-btn" id="mergeBtn" title="เลือกไฟล์ PDF หลายไฟล์ รวมเป็นไฟล์เดียว แล้วดาวน์โหลดทันที" type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="12" height="15" rx="2"/><path d="M9 12h9M18 12l-3-3M18 12l-3 3"/></svg>
             <span>รวมไฟล์</span>
           </button>
-          <input type="file" id="mergeInput" accept="application/pdf" hidden />
+          <input type="file" id="mergeInput" accept="application/pdf" multiple hidden />
           <button class="ribbon-btn" id="startOverBtn" title="เริ่มใหม่" type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/></svg>
             <span>เริ่มใหม่</span>
@@ -3134,7 +3134,8 @@
     railSidebarBtn.disabled = true;
     pageThumbList.innerHTML = "";
     saveBtn.disabled = true;
-    mergeBtn.disabled = true;
+    // mergeBtn is intentionally left alone here — it's a standalone "combine
+    // PDFs and download" tool now, not tied to whether a document is open.
     hasUnsavedChanges = false;
     setStatus("", "idle");
     if (fabricCanvas) {
@@ -3245,7 +3246,7 @@
     resetZoom();
     addTextBtn.disabled = false;
     uploadImageBtn.disabled = false;
-    mergeBtn.disabled = false;
+    // (mergeBtn is a standalone tool, not gated on document state — nothing to do here.)
     [selectToolBtn, penToolBtn, highlightToolBtn, lineToolBtn, arrowToolBtn, rectToolBtn, ellipseToolBtn, redactToolBtn,
       strokeColorInput, strokeWidthSlider, signatureBtn, stampBtn,
       textFontSelect, textBoldBtn, textItalicBtn, textColorInput].forEach((el) => { el.disabled = false; });
@@ -4340,13 +4341,12 @@
   });
 
   mergeBtn.addEventListener("click", () => {
-    if (!currentPdfFile) return;
-    // The native OS file picker that's about to open looks identical to any
-    // other "choose a file" dialog on the web — there's no way to brand or
-    // relabel it. Set a status message *before* opening it so that when the
-    // user comes back from the (generic-looking) picker, the app already
-    // reads "select the PDF to merge in" rather than looking idle/blank.
-    setStatus("เลือกไฟล์ PDF ที่ต้องการรวมเพิ่มเข้ากับไฟล์นี้…", "loading");
+    // Standalone tool: works with or without a document already open, and
+    // doesn't touch whatever's currently in the editor. The native OS file
+    // picker that's about to open looks identical to any other "choose a
+    // file" dialog on the web — there's no way to brand or relabel it — so
+    // set a status message *before* opening it for reassurance on return.
+    setStatus("เลือกไฟล์ PDF อย่างน้อย 2 ไฟล์ที่ต้องการรวมกัน…", "loading");
     mergeInput.click();
   });
   imageInput.addEventListener("change", async (e) => {
@@ -5228,12 +5228,13 @@
   }
 
   // ---------------------------------------------------------------------
-  // Merge another PDF's pages into this document. The CURRENT document's
-  // in-progress edits are baked in first (via the same buildEditedPdfBytes
-  // used by Save & Export), then combined with the incoming file's pages,
-  // and the result is loaded as the new working document — reusing the
-  // entire single-document pipeline instead of teaching pageCache/pdf.js
-  // to juggle two source PDFs at once.
+  // Standalone "merge PDFs" tool — separate from the editor entirely.
+  // Pick 2+ PDF files, they're combined (reusing combinePdfFiles(), the
+  // same helper the dropzone uses when you drop multiple files at once),
+  // and the result downloads immediately. This never touches whatever
+  // document is currently open in the editor, and works even before any
+  // PDF has been loaded — matching a plain "merge PDF" web tool rather
+  // than an in-editor "add pages to this file" action.
   // ---------------------------------------------------------------------
   // Chromium fires a native "cancel" event on <input type="file"> when the
   // picker closes with nothing chosen — reset the "เลือกไฟล์…" status we set
@@ -5242,48 +5243,34 @@
   // where it isn't — the status simply clears on the next real action.)
   mergeInput.addEventListener("cancel", () => setStatus("", "idle"));
   mergeInput.addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    mergeInput.value = ""; // allow picking the same file again later
-    if (!file || file.type !== "application/pdf") {
+    const allFiles = Array.from(e.target.files || []);
+    mergeInput.value = ""; // allow picking the same files again later
+    const pdfFiles = allFiles.filter((f) => f.type === "application/pdf");
+
+    if (pdfFiles.length === 0) {
       setStatus("", "idle");
+      if (allFiles.length > 0) alert("กรุณาเลือกไฟล์ PDF");
       return;
     }
-    if (!currentPdfFile) return;
+    if (pdfFiles.length === 1) {
+      setStatus("กรุณาเลือกไฟล์ PDF อย่างน้อย 2 ไฟล์เพื่อรวม", "error");
+      window.setTimeout(() => setStatus("", "idle"), 2400);
+      return;
+    }
 
-    setStatus("กำลังรวมไฟล์ PDF…", "loading");
+    setStatus(`กำลังรวม ${pdfFiles.length} ไฟล์ PDF…`, "loading");
     mergeBtn.disabled = true;
     try {
-      const editedBytes = await buildEditedPdfBytes(pageOrder);
-      const incomingBytes = await file.arrayBuffer();
-
-      const baseDoc = await PDFDocument.load(editedBytes);
-      const incomingDoc = await PDFDocument.load(incomingBytes);
-      const combinedDoc = await PDFDocument.create();
-
-      const basePages = await combinedDoc.copyPages(baseDoc, baseDoc.getPageIndices());
-      basePages.forEach((p) => combinedDoc.addPage(p));
-      const incomingPages = await combinedDoc.copyPages(incomingDoc, incomingDoc.getPageIndices());
-      incomingPages.forEach((p) => combinedDoc.addPage(p));
-
-      const combinedBytes = await combinedDoc.save();
-      const baseName = currentPdfFile.name.replace(/\.pdf$/i, "");
-      const mergedFile = new File([combinedBytes], `${baseName}-merged.pdf`, { type: "application/pdf" });
-
-      hasUnsavedChanges = false; // the merged file becomes the new baseline
-      await loadPdfFile(mergedFile);
-      // loadPdfFile() always lands back on page 1 — jump straight to the
-      // first newly-added page instead, so the merge is visually obvious
-      // rather than looking identical to a plain re-upload.
-      if (incomingPages.length > 0) {
-        await renderPage(basePages.length);
-        renderSidebar();
-      }
-      setStatus(`รวมไฟล์แล้ว — เพิ่ม ${incomingPages.length} หน้า`, "success");
+      const mergedFile = await combinePdfFiles(pdfFiles);
+      const mergedBytes = await mergedFile.arrayBuffer();
+      const baseName = pdfFiles[0].name.replace(/\.pdf$/i, "");
+      downloadPdfBytes(mergedBytes, `${baseName}-merged.pdf`);
+      setStatus(`รวมไฟล์แล้ว — ดาวน์โหลด ${pdfFiles.length} ไฟล์เป็นไฟล์เดียว`, "success");
       window.setTimeout(() => setStatus("", "idle"), 2400);
     } catch (err) {
       console.error(err);
       setStatus("รวมไฟล์ไม่สำเร็จ", "error");
-      alert("ไม่สามารถรวมไฟล์ PDF นั้นได้: " + err.message);
+      alert("ไม่สามารถรวมไฟล์ PDF เหล่านั้นได้: " + err.message);
     } finally {
       mergeBtn.disabled = false;
     }
