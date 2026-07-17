@@ -1535,7 +1535,7 @@
             <span>อัปโหลด</span>
           </label>
           <input type="file" id="pdfInput" accept="application/pdf" multiple />
-          <button class="ribbon-btn" id="mergeBtn" title="เลือกไฟล์ PDF หลายไฟล์ รวมเป็นไฟล์เดียว แล้วดาวน์โหลดทันที" type="button">
+          <button class="ribbon-btn" id="mergeBtn" title="เลือกไฟล์ PDF หลายไฟล์ รวมเป็นไฟล์เดียว แล้วเปิดดูก่อนบันทึก" type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="12" height="15" rx="2"/><path d="M9 12h9M18 12l-3-3M18 12l-3 3"/></svg>
             <span>รวมไฟล์</span>
           </button>
@@ -5228,13 +5228,12 @@
   }
 
   // ---------------------------------------------------------------------
-  // Standalone "merge PDFs" tool — separate from the editor entirely.
+  // Standalone "merge PDFs" tool — works even before any PDF is open.
   // Pick 2+ PDF files, they're combined (reusing combinePdfFiles(), the
   // same helper the dropzone uses when you drop multiple files at once),
-  // and the result downloads immediately. This never touches whatever
-  // document is currently open in the editor, and works even before any
-  // PDF has been loaded — matching a plain "merge PDF" web tool rather
-  // than an in-editor "add pages to this file" action.
+  // and the merged result opens straight into the editor so the person
+  // can see the combined pages before deciding to save/export — rather
+  // than downloading a file they haven't previewed yet.
   // ---------------------------------------------------------------------
   // Chromium fires a native "cancel" event on <input type="file"> when the
   // picker closes with nothing chosen — reset the "เลือกไฟล์…" status we set
@@ -5262,11 +5261,10 @@
     mergeBtn.disabled = true;
     try {
       const mergedFile = await combinePdfFiles(pdfFiles);
-      const mergedBytes = await mergedFile.arrayBuffer();
-      const baseName = pdfFiles[0].name.replace(/\.pdf$/i, "");
-      downloadPdfBytes(mergedBytes, `${baseName}-merged.pdf`);
-      setStatus(`รวมไฟล์แล้ว — ดาวน์โหลด ${pdfFiles.length} ไฟล์เป็นไฟล์เดียว`, "success");
-      window.setTimeout(() => setStatus("", "idle"), 2400);
+      // loadPdfFile() opens it in the editor and handles its own status
+      // toast ("โหลด PDF สำเร็จ") — same landing experience as any other
+      // upload, so the merged pages are visible before Save & Export.
+      await loadPdfFile(mergedFile);
     } catch (err) {
       console.error(err);
       setStatus("รวมไฟล์ไม่สำเร็จ", "error");
