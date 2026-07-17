@@ -4341,6 +4341,12 @@
 
   mergeBtn.addEventListener("click", () => {
     if (!currentPdfFile) return;
+    // The native OS file picker that's about to open looks identical to any
+    // other "choose a file" dialog on the web — there's no way to brand or
+    // relabel it. Set a status message *before* opening it so that when the
+    // user comes back from the (generic-looking) picker, the app already
+    // reads "select the PDF to merge in" rather than looking idle/blank.
+    setStatus("เลือกไฟล์ PDF ที่ต้องการรวมเพิ่มเข้ากับไฟล์นี้…", "loading");
     mergeInput.click();
   });
   imageInput.addEventListener("change", async (e) => {
@@ -5229,10 +5235,19 @@
   // entire single-document pipeline instead of teaching pageCache/pdf.js
   // to juggle two source PDFs at once.
   // ---------------------------------------------------------------------
+  // Chromium fires a native "cancel" event on <input type="file"> when the
+  // picker closes with nothing chosen — reset the "เลือกไฟล์…" status we set
+  // in mergeBtn's click handler so it doesn't get stuck reading "loading"
+  // forever. (Not universally supported outside Chromium, but harmless
+  // where it isn't — the status simply clears on the next real action.)
+  mergeInput.addEventListener("cancel", () => setStatus("", "idle"));
   mergeInput.addEventListener("change", async (e) => {
     const file = e.target.files[0];
     mergeInput.value = ""; // allow picking the same file again later
-    if (!file || file.type !== "application/pdf") return;
+    if (!file || file.type !== "application/pdf") {
+      setStatus("", "idle");
+      return;
+    }
     if (!currentPdfFile) return;
 
     setStatus("กำลังรวมไฟล์ PDF…", "loading");
