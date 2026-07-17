@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>โปรแกรมนี้สีแดง 😎 · โปรแกรมแก้ไข PDF</title>
+<title>Cutout · โปรแกรมแก้ไข PDF</title>
 <script>
   // Applied synchronously, before any CSS paints, so the page never flashes
   // the wrong theme on load. Preference persists in localStorage; falls
@@ -25,7 +25,7 @@
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content=" PDF" />
+<meta name="apple-mobile-web-app-title" content="Cutout PDF" />
 <link rel="apple-touch-icon" href="icon-source.svg" />
 
 <!--
@@ -1485,7 +1485,7 @@
       <span class="brand-mark">
         <svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" fill="#041107"/><rect x="8" y="14" width="7" height="5" rx="1" stroke="#49de78" stroke-width="1.4" stroke-dasharray="2 2" fill="none"/></svg>
       </span>
-      <span class="brand-name">โปรแกรมนี้สีแดง 😎 <span class="dim">· โปรแกรมแก้ไข PDF</span></span>
+      <span class="brand-name">Cutout <span class="dim">· โปรแกรมแก้ไข PDF</span></span>
     </div>
 
     <nav class="ribbon-tabs" id="ribbonTabs">
@@ -2562,6 +2562,8 @@
       railFindBtn.disabled = false;
       railStampBtn.disabled = false;
       railSidebarBtn.disabled = false;
+      syncToolkitCardStates(toolkitGrid);
+      syncToolkitCardStates(dropzoneToolkitGrid);
       detectFormFields(file); // best-effort — hides the button again if no usable form
       // (re-reads `file` itself rather than reusing `arrayBuffer` above, since
       // pdf.js's getDocument() may have already transferred/detached that buffer)
@@ -3146,6 +3148,8 @@
       textFontSelect, textBoldBtn, textItalicBtn, textColorInput].forEach((el) => { el.disabled = true; });
     textBoldBtn.classList.remove("active");
     textItalicBtn.classList.remove("active");
+    syncToolkitCardStates(toolkitGrid);
+    syncToolkitCardStates(dropzoneToolkitGrid);
   });
 
   // Render (or re-activate) a given 0-based page index, persisting the
@@ -5718,11 +5722,25 @@
     });
   }
 
+  // Mirrors each card's disabled state from the real button it delegates
+  // to, so a card that can't do anything yet (no PDF loaded) actually
+  // LOOKS disabled (greyed out, no-cursor) instead of looking fully live
+  // and then silently doing nothing when clicked — that mismatch was
+  // confusing enough to be reported as "the button doesn't work".
+  function syncToolkitCardStates(container) {
+    container.querySelectorAll(".toolkit-card[data-btn]").forEach((card) => {
+      const target = document.getElementById(card.dataset.btn);
+      card.disabled = !!(target && target.disabled);
+    });
+  }
+
   renderToolkitGrid(toolkitGrid);
   // No PDF is open yet on this screen, so Undo/Redo would have nothing to
   // act on — leave "ประวัติ" out of the dropzone preview, still shown in
   // the full modal (opened via the rail icon, normally mid-edit).
   renderToolkitGrid(dropzoneToolkitGrid, ["ประวัติ"]);
+  syncToolkitCardStates(toolkitGrid);
+  syncToolkitCardStates(dropzoneToolkitGrid);
 
   function filterToolkitCards(query) {
     const q = query.trim().toLowerCase();
